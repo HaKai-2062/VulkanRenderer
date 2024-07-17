@@ -21,3 +21,24 @@ file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_executable ("${CMAKE_PROJECT_NAME}")
 target_sources("${CMAKE_PROJECT_NAME}" PRIVATE ${MY_SOURCES})
 set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY CXX_STANDARD 20)
+
+if(MSVC) # If using the VS compiler...
+
+	set_target_properties(${BUILD_TARGET} PROPERTIES LINK_FLAGS "/PROFILE") # for profiling
+
+	#target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC _CRT_SECURE_NO_WARNINGS)		# secure function warnings
+
+	#set_target_properties("${CMAKE_PROJECT_NAME}" PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup") #no console
+	
+	#set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDebug<$<CONFIG:Debug>:Debug>")
+
+endif()
+
+target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC 
+"C:/VulkanSDK/1.3.283.0/Include/"
+"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glfw-3.4.bin.WIN64/include/"
+"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glm/")
+
+target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE 
+"C:/VulkanSDK/1.3.283.0/Lib/vulkan-1.lib" 
+"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glfw-3.4.bin.WIN64/lib-vc2022/glfw3.lib")
