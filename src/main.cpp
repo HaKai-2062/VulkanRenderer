@@ -11,6 +11,7 @@
 #include <limits>
 #include <optional>
 #include <set>
+#include <fstream>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -30,6 +31,7 @@ const std::vector<const char*> deviceExtensions =
 #else
 	const bool enableValidationLayers = true;
 #endif
+
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
@@ -102,6 +104,7 @@ private:
 		CreateLogicalDevice();
 		CreateSwapChain();
 		CreateImageViews();
+		CreateGraphicsPipeline();
 	}
 
 	void MainLoop()
@@ -227,7 +230,7 @@ private:
 
 		for (const auto& device : devices)
 		{
-			if (isDeviceSuitable(device))
+			if (IsDeviceSuitable(device))
 			{
 				m_PhysicalDevice = device;
 				break;
@@ -377,9 +380,53 @@ private:
 
 			if (vkCreateImageView(m_Device, &createInfo, nullptr, &m_SwapChainImageViews[i]) != VK_SUCCESS)
 			{
-				throw std::runtime_error("failed to create image views!");
+				throw std::runtime_error("Failed to create image views!");
 			}
 		}
+	}
+
+	void CreateGraphicsPipeline()
+	{
+		auto vertShaderCode = ReadFile("shaders/vert.spv");
+		auto fragShaderCode = ReadFile("shaders/frag.spv");
+
+		VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
+		VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+
+		VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		vertShaderStageInfo.module = vertShaderModule;
+		vertShaderStageInfo.pName = "main";
+		vertShaderStageInfo.pSpecializationInfo = nullptr;
+
+		VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+		fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		fragShaderStageInfo.module = fragShaderModule;
+		fragShaderStageInfo.pName = "main";
+		fragShaderStageInfo.pSpecializationInfo = nullptr;
+
+		VkPipelineShaderStageCreateInfo shaderInfo[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+		vkDestroyShaderModule(m_Device, fragShaderModule, nullptr);
+		vkDestroyShaderModule(m_Device, vertShaderModule, nullptr);
+	}
+
+	VkShaderModule CreateShaderModule(const std::vector<char>& code)
+	{
+		VkShaderModuleCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		createInfo.codeSize = code.size();
+		createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+		VkShaderModule shaderModule;
+		if (vkCreateShaderModule(m_Device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create shader module!");
+		}
+
+		return shaderModule;
 	}
 
 	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
@@ -459,7 +506,7 @@ private:
 		return details;
 	}
 
-	bool isDeviceSuitable(VkPhysicalDevice device)
+	bool IsDeviceSuitable(VkPhysicalDevice device)
 	{
 		QueueFamilyIndices indices = FindQueueFamilies(device);
 		bool extensionSupported = CheckDeviceExtensionSupport(device);
@@ -574,6 +621,25 @@ private:
 		}
 
 		return true;
+	}
+
+	static std::vector<char> ReadFile(const std::string& filename)
+	{
+		std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+		if (!file.is_open())
+		{
+			throw std::runtime_error("Failed to open file!");
+		}
+
+		size_t fileSize = (size_t)file.tellg();
+		std::vector<char> buffer(fileSize);
+
+		file.seekg(0);
+		file.read(buffer.data(), fileSize);
+
+		file.close();
+		return buffer;
 	}
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
