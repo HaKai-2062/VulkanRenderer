@@ -12,6 +12,7 @@
 #include <optional>
 #include <set>
 #include <fstream>
+#include <sstream>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -31,6 +32,28 @@ const std::vector<const char*> deviceExtensions =
 #else
 	const bool enableValidationLayers = true;
 #endif
+
+void addFPSToTitle(GLFWwindow* window)
+{
+	static double lastTime = 0;
+	static uint32_t nFrames = 0;
+
+	double currentTime = glfwGetTime();
+	double delta = currentTime - lastTime;
+	nFrames++;
+
+	if (delta >= 1.0)
+	{
+		double fps = static_cast<double>(nFrames) / delta;
+		
+		std::stringstream ss;
+		ss << "VulkanRenderer" << ", [" << 1000.0/nFrames << "ms]" << ", [" << fps << " FPS]";
+		glfwSetWindowTitle(window, ss.str().c_str());
+
+		nFrames = 0;
+		lastTime = currentTime;
+	}
+}
 
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
@@ -118,6 +141,7 @@ private:
 		{
 			glfwPollEvents();
 			DrawFrame();
+			addFPSToTitle(m_Window);
 		}
 
 		vkDeviceWaitIdle(m_Device);
@@ -190,7 +214,7 @@ private:
 			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 			createInfo.ppEnabledLayerNames = validationLayers.data();
 
-			populateDebugMessengerCreateInfo(debugCreateInfo);
+			PopulateDebugMessengerCreateInfo(debugCreateInfo);
 			createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
 		}
 		else
@@ -205,7 +229,7 @@ private:
 		}
 	}
 
-	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo)
+	void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo)
 	{
 		createInfo = {};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -222,7 +246,7 @@ private:
 		}
 
 		VkDebugUtilsMessengerCreateInfoEXT createInfo;
-		populateDebugMessengerCreateInfo(createInfo);
+		PopulateDebugMessengerCreateInfo(createInfo);
 
 		if (CreateDebugUtilsMessengerEXT(m_Instance, &createInfo, nullptr, &m_DebugMessenger) != VK_SUCCESS)
 		{
@@ -253,10 +277,26 @@ private:
 
 		for (const auto& device : devices)
 		{
+			VkPhysicalDeviceProperties deviceProperties;
+			vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+			printf("Phsyical Devices\n	Name: %s\n", deviceProperties.deviceName);
+			uint32_t apiVersion = deviceProperties.apiVersion;
+			printf("	API Version: %d.%d.%d.%d\n",
+				VK_API_VERSION_VARIANT(apiVersion),
+				VK_API_VERSION_MAJOR(apiVersion),
+				VK_API_VERSION_MINOR(apiVersion),
+				VK_API_VERSION_PATCH(apiVersion));
+
 			if (IsDeviceSuitable(device))
 			{
+				printf("	Suitable: Yes\n");
 				m_PhysicalDevice = device;
 				break;
+			}
+			else
+			{
+				printf("	Suitable: No\n");
 			}
 		}
 
@@ -325,7 +365,7 @@ private:
 
 		// May have to wait on the driver to complete internal operations 
 		// before we can acquire another image to render to
-		//  so we request 1 more than min
+		// so we request 1 more than min
 		uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
 
 		if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
@@ -798,6 +838,9 @@ private:
 
 	VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
 	{
+		// To disable vsync
+		return VK_PRESENT_MODE_IMMEDIATE_KHR;
+		
 		for (const auto& availablePresentMode : availablePresentModes)
 		{
 			if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
