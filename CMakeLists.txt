@@ -37,6 +37,7 @@ endif()
 target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC 
 "C:/VulkanSDK/1.3.283.0/Include/"
 "${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glfw-3.4.bin.WIN64/include/"
+"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/stb/"
 "${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glm/")
 
 target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE 
