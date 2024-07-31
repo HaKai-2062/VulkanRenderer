@@ -13,9 +13,12 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDebug")
 else()
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 endif()
 
 project ("VulkanRenderer")
+
+add_subdirectory(Dependencies/tinyobjloader)
 
 file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_executable ("${CMAKE_PROJECT_NAME}")
@@ -38,8 +41,10 @@ target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC
 "C:/VulkanSDK/1.3.283.0/Include/"
 "${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glfw-3.4.bin.WIN64/include/"
 "${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/stb/"
+"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/tinyobjloader/"
 "${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glm/")
 
 target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE 
 "C:/VulkanSDK/1.3.283.0/Lib/vulkan-1.lib" 
-"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glfw-3.4.bin.WIN64/lib-vc2022/glfw3.lib")
+"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glfw-3.4.bin.WIN64/lib-vc2022/glfw3.lib"
+tinyobjloader)
