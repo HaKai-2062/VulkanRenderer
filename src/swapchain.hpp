@@ -14,7 +14,6 @@ namespace VE
 		std::vector<VkPresentModeKHR> presentModes;
 	};
 
-
 	class SwapChain
 	{
 	public:
@@ -24,7 +23,7 @@ namespace VE
 		void CreateSwapChain();
 		void CreateImageViews();
 		void CreateFramebuffers();
-		static VkImageView CreateImageView(VkImage image, VkFormat format);
+		static VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
 
 		VkSwapchainKHR& GetSwapChain() { return m_SwapChain; }
 		VkExtent2D& GetSwapChainExtent() { return m_SwapChainExtent; }

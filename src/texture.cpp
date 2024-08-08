@@ -46,32 +46,33 @@ namespace VE
 		imageInfo.extent.depth = 1;
 		imageInfo.mipLevels = 1;
 		imageInfo.arrayLayers = 1;
-		imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		imageInfo.format = format;
+		imageInfo.tiling = tiling;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage = usage;
 		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 		imageInfo.flags = 0; // Optional
 
-		if (vkCreateImage(getDevice(), &imageInfo, nullptr, &m_TextureImage) != VK_SUCCESS)
+		if (vkCreateImage(getDevice(), &imageInfo, nullptr, &image) != VK_SUCCESS)
 		{
 			throw std::runtime_error("failed to create image!");
 		}
 
 		VkMemoryRequirements memRequirements;
-		vkGetImageMemoryRequirements(getDevice(), m_TextureImage, &memRequirements);
+		vkGetImageMemoryRequirements(getDevice(), image, &memRequirements);
 
 		VkMemoryAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = Buffers::FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		allocInfo.memoryTypeIndex = Buffers::FindMemoryType(memRequirements.memoryTypeBits, properties);
 
-		if (vkAllocateMemory(getDevice(), &allocInfo, nullptr, &m_TextureImageMemory) != VK_SUCCESS)
+		if (vkAllocateMemory(getDevice(), &allocInfo, nullptr, &imageMemory) != VK_SUCCESS)
 		{
 			throw std::runtime_error("failed to allocate image memory!");
 		}
 
-		vkBindImageMemory(getDevice(), m_TextureImage, m_TextureImageMemory, 0);
+		vkBindImageMemory(getDevice(), image, imageMemory, 0);
 	}
 
 	void Texture::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
@@ -114,9 +115,31 @@ namespace VE
 			sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		}
+		else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+		{
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		}
 		else
 		{
 			throw std::invalid_argument("Unsupported layout transition!");
+		}
+
+		if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+		{
+			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+			if (HasStencilComponent(format))
+			{
+				barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+			}
+		}
+		else
+		{
+			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		}
 
 		vkCmdPipelineBarrier(
@@ -195,7 +218,7 @@ namespace VE
 
 	void Texture::CreateTextureImageView()
 	{
-		m_TextureImageView = SwapChain::CreateImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB);
+		m_TextureImageView = SwapChain::CreateImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 	}
 
 	void Texture::CreateTextureSampler()
@@ -226,5 +249,10 @@ namespace VE
 		{
 			throw::std::runtime_error("failed to create texture sampler!");
 		}
+	}
+
+	bool Texture::HasStencilComponent(VkFormat format)
+	{
+		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 }

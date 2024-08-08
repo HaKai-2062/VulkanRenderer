@@ -81,8 +81,9 @@ namespace VE
 		m_VkDescriptors.CreateDescriptorSetLayout();
 		m_VkPipeline.CreateGraphicsPipeline();
 
-		m_VkSwapChain.CreateFramebuffers();
 		m_VkBuffers.CreateCommandPool();
+		m_VkBuffers.CreateDepthResources();
+		m_VkSwapChain.CreateFramebuffers();
 
 		m_VkTexture.CreateTextureImage();
 		m_VkTexture.CreateTextureImageView();

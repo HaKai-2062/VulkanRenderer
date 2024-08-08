@@ -7,21 +7,28 @@
 #include "instance.hpp"
 #include "application.hpp"
 #include "vertex.hpp"
+#include "texture.hpp"
 #include "application.hpp"
 
 namespace VE
 {
 	const std::vector<Vertex> vertices =
 	{
-		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-		{{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-		{{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-		{{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+		{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+		{{ 0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+		{{ 0.5f,  0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+		{{-0.5f,  0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+
+		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+		{{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+		{{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+		{{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 	};
 
 	const std::vector<uint16_t> indices =
 	{
-		0, 1, 2, 2, 3, 0
+		0, 1, 2, 2, 3, 0,
+		4, 5, 6, 6, 7, 4
 	};
 
 	static auto getDevice = []() -> VkDevice&
@@ -71,6 +78,10 @@ namespace VE
 
 	Buffers::~Buffers()
 	{
+		vkDestroyImageView(getDevice(), m_DepthImageView, nullptr);
+		vkDestroyImage(getDevice(), m_DepthImage, nullptr);
+		vkFreeMemory(getDevice(), m_DepthImageMemory, nullptr);
+
 		vkDestroyBuffer(getDevice(), m_VertexBuffer, nullptr);
 		vkFreeMemory(getDevice(), m_VertexBufferMemory, nullptr);
 
@@ -132,9 +143,12 @@ namespace VE
 		renderPassInfo.renderArea.offset = { 0, 0 };
 		renderPassInfo.renderArea.extent = getSwapChainExtent();
 
-		VkClearValue clearColor = { { {0.0f, 0.0f, 0.0f, 1.0f} } };
-		renderPassInfo.clearValueCount = 1;
-		renderPassInfo.pClearValues = &clearColor;
+		std::array<VkClearValue, 2> clearValues{};
+		clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+		clearValues[1].depthStencil = { 1.0f, 0 };
+
+		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+		renderPassInfo.pClearValues = clearValues.data();
 
 		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -252,6 +266,17 @@ namespace VE
 		vkFreeMemory(getDevice(), stagingBufferMemory, nullptr);
 	}
 
+	void Buffers::CreateDepthResources()
+	{
+		VkFormat depthFormat = FindDepthFormat();
+		Texture::CreateImage(getSwapChainExtent().width, getSwapChainExtent().height, depthFormat, VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_DepthImage, m_DepthImageMemory);
+		m_DepthImageView = SwapChain::CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+		// This is optional and we dont need to explicitly transition the depth image
+		Texture::TransitionImageLayout(m_DepthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+	}
+
 	VkCommandBuffer Buffers::BeginSingleTimeCommands()
 	{
 		VkCommandBufferAllocateInfo allocInfo{};
@@ -300,5 +325,34 @@ namespace VE
 		}
 
 		throw std::runtime_error("failed to find suitable memory type!");
+	}
+
+	VkFormat Buffers::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+	{
+		for (VkFormat format : candidates)
+		{
+			VkFormatProperties properties;
+			vkGetPhysicalDeviceFormatProperties(getPhysicalDevice(), format, &properties);
+
+			if (tiling == VK_IMAGE_TILING_LINEAR && (properties.linearTilingFeatures & features) == features)
+			{
+				return format;
+			}
+			else if (tiling == VK_IMAGE_TILING_OPTIMAL && (properties.optimalTilingFeatures & features) == features)
+			{
+				return format;
+			}
+		}
+
+		throw std::runtime_error("Failed to find supported format!");
+	}
+
+	VkFormat Buffers::FindDepthFormat()
+	{
+		return FindSupportedFormat(
+			{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+		);
 	}
 }

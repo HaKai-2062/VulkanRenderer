@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <limits>
+#include <array>
 
 #include "swapchain.hpp"
 #include "instance.hpp"
@@ -31,6 +32,10 @@ namespace VE
 	static auto getRenderPass = []() -> const VkRenderPass&
 		{
 			return Application::GetInstance()->m_VkPipeline.GetRenderPass();
+		};
+	static auto getDepthImageView = []() -> const VkImageView&
+		{
+			return Application::GetInstance()->m_VkBuffers.GetDepthImageView();
 		};
 
 	SwapChain::~SwapChain()
@@ -113,14 +118,14 @@ namespace VE
 		m_SwapChainExtent = extent;
 	}
 
-	VkImageView SwapChain::CreateImageView(VkImage image, VkFormat format)
+	VkImageView SwapChain::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
 	{
 		VkImageViewCreateInfo viewInfo{};
 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		viewInfo.image = image;
 		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		viewInfo.format = format;
-		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		viewInfo.subresourceRange.aspectMask = aspectFlags;
 		viewInfo.subresourceRange.baseMipLevel = 0;
 		viewInfo.subresourceRange.levelCount = 1;
 		viewInfo.subresourceRange.baseArrayLayer = 0;
@@ -141,7 +146,7 @@ namespace VE
 
 		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
 		{
-			m_SwapChainImageViews[i] = CreateImageView(m_SwapChainImages[i], m_SwapChainImageFormat);
+			m_SwapChainImageViews[i] = CreateImageView(m_SwapChainImages[i], m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 	}
 
@@ -204,16 +209,17 @@ namespace VE
 
 		for (size_t i = 0; i < m_SwapChainImageViews.size(); i++)
 		{
-			VkImageView attachments[] =
+			std::array<VkImageView, 2> attachments =
 			{
-				m_SwapChainImageViews[i]
+				m_SwapChainImageViews[i],
+				getDepthImageView()
 			};
 
 			VkFramebufferCreateInfo framebufferInfo{};
 			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 			framebufferInfo.renderPass = getRenderPass();
-			framebufferInfo.attachmentCount = 1;
-			framebufferInfo.pAttachments = attachments;
+			framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+			framebufferInfo.pAttachments = attachments.data();
 			framebufferInfo.width = m_SwapChainExtent.width;
 			framebufferInfo.height = m_SwapChainExtent.height;
 			framebufferInfo.layers = 1;
