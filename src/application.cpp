@@ -83,11 +83,16 @@ namespace VE
 
 		m_VkSwapChain.CreateFramebuffers();
 		m_VkBuffers.CreateCommandPool();
+
+		m_VkTexture.CreateTextureImage();
+		m_VkTexture.CreateTextureImageView();
+		m_VkTexture.CreateTextureSampler();
+
 		m_VkBuffers.CreateVertexBuffer();
 		m_VkBuffers.CreateIndexBuffer();
 
 		m_VkDescriptors.CreateUniformBuffers();
-		m_VkDescriptors.CreateDescriptionPool();
+		m_VkDescriptors.CreateDescriptorPool();
 		m_VkDescriptors.CreateDescriptorSets();
 
 		m_VkBuffers.CreateCommandBuffer();
@@ -188,16 +193,6 @@ namespace VE
 		}
 	}
 
-	void Application::DestroySyncObjects()
-	{
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-		{
-			vkDestroySemaphore(getDevice(), m_ImageAvailableSemaphores[i], nullptr);
-			vkDestroySemaphore(getDevice(), m_RenderFinishedSemaphores[i], nullptr);
-			vkDestroyFence(getDevice(), m_InFlightFences[i], nullptr);
-		}
-	}
-
 	void Application::RecreateSwapChain()
 	{
 		int width = 0, height = 0;
@@ -215,6 +210,17 @@ namespace VE
 		m_VkSwapChain.CreateSwapChain();
 		m_VkSwapChain.CreateImageViews();
 		m_VkSwapChain.CreateFramebuffers();
+	}
+
+
+	void Application::DestroySyncObjects()
+	{
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		{
+			vkDestroySemaphore(getDevice(), m_ImageAvailableSemaphores[i], nullptr);
+			vkDestroySemaphore(getDevice(), m_RenderFinishedSemaphores[i], nullptr);
+			vkDestroyFence(getDevice(), m_InFlightFences[i], nullptr);
+		}
 	}
 
 	void addFPSToTitle(GLFWwindow* window)

@@ -5,6 +5,7 @@
 #include "pipeline.hpp"
 #include "buffers.hpp"
 #include "descriptors.hpp"
+#include "texture.hpp"
 
 struct GLFWwindow;
 
@@ -33,6 +34,7 @@ namespace VE
 		Instance m_VkInstance;
 		Pipeline m_VkPipeline;
 		Buffers m_VkBuffers;
+		Texture m_VkTexture;
 		Descriptors m_VkDescriptors;
 		SwapChain m_VkSwapChain;
 

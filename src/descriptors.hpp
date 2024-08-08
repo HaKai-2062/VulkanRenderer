@@ -14,7 +14,7 @@ namespace VE
 		~Descriptors();
 
 		void CreateUniformBuffers();
-		void CreateDescriptionPool();
+		void CreateDescriptorPool();
 		void CreateDescriptorSets();
 		void CreateDescriptorSetLayout();
 		void UpdateUniformBuffer(uint32_t currentImage);
