@@ -33,6 +33,10 @@ namespace VE
 		{
 			return Application::GetInstance()->m_VkSwapChain.GetSwapChainImageViews();
 		};
+	static auto getSwapChainFormat = []() -> VkFormat&
+		{
+			return Application::GetInstance()->m_VkSwapChain.GetSwapChainFormat();
+		};
 	static auto getSwapChainFramebuffers = []() -> const std::vector<VkFramebuffer>&
 		{
 			return Application::GetInstance()->m_VkSwapChain.GetSwapChainFramebuffers();
@@ -69,6 +73,7 @@ namespace VE
 	Buffers::~Buffers()
 	{
 		DestroyDepthImage();
+		DestroyColorImage();
 
 		vkDestroyBuffer(getDevice(), m_VertexBuffer, nullptr);
 		vkFreeMemory(getDevice(), m_VertexBufferMemory, nullptr);
@@ -86,6 +91,13 @@ namespace VE
 		vkDestroyImageView(getDevice(), m_DepthImageView, nullptr);
 		vkDestroyImage(getDevice(), m_DepthImage, nullptr);
 		vkFreeMemory(getDevice(), m_DepthImageMemory, nullptr);
+	}
+
+	void Buffers::DestroyColorImage()
+	{
+		vkDestroyImageView(getDevice(), m_ColorImageView, nullptr);
+		vkDestroyImage(getDevice(), m_ColorImage, nullptr);
+		vkFreeMemory(getDevice(), m_ColorImageMemory, nullptr);
 	}
 
 	void Buffers::CreateCommandPool()
@@ -264,12 +276,20 @@ namespace VE
 	void Buffers::CreateDepthResources()
 	{
 		VkFormat depthFormat = FindDepthFormat();
-		Texture::CreateImage(getSwapChainExtent().width, getSwapChainExtent().height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL,
+		Texture::CreateImage(getSwapChainExtent().width, getSwapChainExtent().height, 1, m_MSAASamples, depthFormat, VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_DepthImage, m_DepthImageMemory);
 		m_DepthImageView = SwapChain::CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
 		// This is optional and we dont need to explicitly transition the depth image
 		Texture::TransitionImageLayout(m_DepthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
+	}
+
+	void Buffers::CreateColorResources()
+	{
+		VkFormat colorFormat = getSwapChainFormat();
+
+		Texture::CreateImage(getSwapChainExtent().width, getSwapChainExtent().height, 1, m_MSAASamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_ColorImage, m_ColorImageMemory);
+		m_ColorImageView = SwapChain::CreateImageView(m_ColorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
 
 	VkCommandBuffer Buffers::BeginSingleTimeCommands()

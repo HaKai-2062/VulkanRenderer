@@ -29,6 +29,10 @@ namespace VE
 		{
 			return Application::GetInstance()->m_VkInstance.GetSurface();
 		};
+	static auto setMSAASamples = [](VkSampleCountFlagBits sample)
+		{
+			Application::GetInstance()->m_VkBuffers.SetMSAASamples(sample);
+		};
 
 	Instance::~Instance()
 	{
@@ -146,6 +150,7 @@ namespace VE
 			{
 				printf("	Suitable: Yes\n");
 				m_PhysicalDevice = device;
+				setMSAASamples(GetMaxUsableSampleCount());
 				break;
 			}
 			else
@@ -182,6 +187,7 @@ namespace VE
 
 		VkPhysicalDeviceFeatures deviceFeatures{};
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
+		deviceFeatures.sampleRateShading = VK_TRUE; // enable sample shading feature for the device
 
 		VkDeviceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -352,6 +358,22 @@ namespace VE
 		}
 
 		return extensions;
+	}
+
+	VkSampleCountFlagBits Instance::GetMaxUsableSampleCount()
+	{
+		VkPhysicalDeviceProperties physicalDeviceProperties;
+		vkGetPhysicalDeviceProperties(m_PhysicalDevice, &physicalDeviceProperties);
+
+		VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+		if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
+		if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
+		if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
+		if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+		if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
+		if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
+
+		return VK_SAMPLE_COUNT_1_BIT;
 	}
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(

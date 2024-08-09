@@ -82,6 +82,7 @@ namespace VE
 		m_VkPipeline.CreateGraphicsPipeline();
 
 		m_VkBuffers.CreateCommandPool();
+		m_VkBuffers.CreateColorResources();
 		m_VkBuffers.CreateDepthResources();
 		m_VkSwapChain.CreateFramebuffers();
 
@@ -209,10 +210,12 @@ namespace VE
 		vkDeviceWaitIdle(getDevice());
 
 		m_VkBuffers.DestroyDepthImage();
+		m_VkBuffers.DestroyColorImage();
 		m_VkSwapChain.~SwapChain();
 
 		m_VkSwapChain.CreateSwapChain();
 		m_VkSwapChain.CreateImageViews();
+		m_VkBuffers.CreateColorResources();
 		m_VkBuffers.CreateDepthResources();
 		m_VkSwapChain.CreateFramebuffers();
 	}

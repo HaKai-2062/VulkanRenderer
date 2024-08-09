@@ -37,6 +37,10 @@ namespace VE
 		{
 			return Application::GetInstance()->m_VkBuffers.GetDepthImageView();
 		};
+	static auto getColorImageView = []() -> const VkImageView&
+		{
+			return Application::GetInstance()->m_VkBuffers.GetColorImageView();
+		};
 
 	SwapChain::~SwapChain()
 	{
@@ -209,10 +213,11 @@ namespace VE
 
 		for (size_t i = 0; i < m_SwapChainImageViews.size(); i++)
 		{
-			std::array<VkImageView, 2> attachments =
+			std::array<VkImageView, 3> attachments =
 			{
-				m_SwapChainImageViews[i],
-				getDepthImageView()
+				getColorImageView(),
+				getDepthImageView(),
+				m_SwapChainImageViews[i]
 			};
 
 			VkFramebufferCreateInfo framebufferInfo{};
