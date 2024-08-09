@@ -264,12 +264,12 @@ namespace VE
 	void Buffers::CreateDepthResources()
 	{
 		VkFormat depthFormat = FindDepthFormat();
-		Texture::CreateImage(getSwapChainExtent().width, getSwapChainExtent().height, depthFormat, VK_IMAGE_TILING_OPTIMAL,
+		Texture::CreateImage(getSwapChainExtent().width, getSwapChainExtent().height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_DepthImage, m_DepthImageMemory);
-		m_DepthImageView = SwapChain::CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+		m_DepthImageView = SwapChain::CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
 		// This is optional and we dont need to explicitly transition the depth image
-		Texture::TransitionImageLayout(m_DepthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		Texture::TransitionImageLayout(m_DepthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
 	}
 
 	VkCommandBuffer Buffers::BeginSingleTimeCommands()

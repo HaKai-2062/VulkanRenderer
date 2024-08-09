@@ -22,7 +22,7 @@ namespace VE
 		void CreateSwapChain();
 		void CreateImageViews();
 		void CreateFramebuffers();
-		static VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+		static VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
 
 		VkSwapchainKHR& GetSwapChain() { return m_SwapChain; }
 		VkExtent2D& GetSwapChainExtent() { return m_SwapChainExtent; }
