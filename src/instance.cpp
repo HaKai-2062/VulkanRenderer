@@ -4,9 +4,6 @@
 #include <set>
 #include <sstream>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #include "instance.hpp"
 #include "application.hpp"
 

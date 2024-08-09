@@ -8,29 +8,11 @@
 #include "application.hpp"
 #include "vertex.hpp"
 #include "texture.hpp"
+#include "model.hpp"
 #include "application.hpp"
 
 namespace VE
 {
-	const std::vector<Vertex> vertices =
-	{
-		{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-		{{ 0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-		{{ 0.5f,  0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-		{{-0.5f,  0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-
-		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-		{{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-		{{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-		{{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-	};
-
-	const std::vector<uint16_t> indices =
-	{
-		0, 1, 2, 2, 3, 0,
-		4, 5, 6, 6, 7, 4
-	};
-
 	static auto getDevice = []() -> VkDevice&
 		{
 			return Application::GetInstance()->m_VkInstance.GetDevice();
@@ -74,6 +56,14 @@ namespace VE
 	static auto getCurrentFrame = []() -> const uint32_t
 		{
 			return Application::GetInstance()->GetCurrentFrame();
+		};
+	static auto getModelVertices = []() -> const std::vector<Vertex>&
+		{
+			return Application::GetInstance()->m_VkModel.GetModelVertices();
+		};
+	static auto getModelIndices = []() -> const std::vector<uint32_t>&
+		{
+			return Application::GetInstance()->m_VkModel.GetModelIndices();
 		};
 
 	Buffers::~Buffers()
@@ -172,10 +162,10 @@ namespace VE
 		VkDeviceSize offsets[] = { 0 };
 		
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-		vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, getPipelineLayout(), 0, 1, &getDescriptorSets()[getCurrentFrame()], 0, nullptr);
 
-		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(getModelIndices().size()), 1, 0, 0, 0);
 		vkCmdEndRenderPass(commandBuffer);
 
 		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -227,7 +217,7 @@ namespace VE
 
 	void Buffers::CreateVertexBuffer()
 	{
-		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+		VkDeviceSize bufferSize = sizeof(getModelVertices()[0]) * getModelVertices().size();
 
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
@@ -235,7 +225,7 @@ namespace VE
 
 		void* data;
 		vkMapMemory(getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
-		memcpy(data, vertices.data(), static_cast<size_t>(bufferSize));
+		memcpy(data, getModelVertices().data(), static_cast<size_t>(bufferSize));
 		vkUnmapMemory(getDevice(), stagingBufferMemory);
 
 		CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_VertexBuffer, m_VertexBufferMemory);
@@ -247,7 +237,7 @@ namespace VE
 
 	void Buffers::CreateIndexBuffer()
 	{
-		VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+		VkDeviceSize bufferSize = sizeof(getModelIndices()[0]) * getModelIndices().size();
 
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
@@ -255,7 +245,7 @@ namespace VE
 
 		void* data;
 		vkMapMemory(getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
-		memcpy(data, indices.data(), (size_t)bufferSize);
+		memcpy(data, getModelIndices().data(), (size_t)bufferSize);
 		vkUnmapMemory(getDevice(), stagingBufferMemory);
 
 		CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_IndexBuffer, m_IndexBufferMemory);
@@ -344,7 +334,7 @@ namespace VE
 			}
 		}
 
-		throw std::runtime_error("Failed to find supported format!");
+		throw std::runtime_error("failed to find supported format!");
 	}
 
 	VkFormat Buffers::FindDepthFormat()

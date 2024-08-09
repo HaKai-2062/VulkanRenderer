@@ -6,6 +6,7 @@
 #include "buffers.hpp"
 #include "descriptors.hpp"
 #include "texture.hpp"
+#include "model.hpp"
 
 struct GLFWwindow;
 
@@ -37,6 +38,7 @@ namespace VE
 		Texture m_VkTexture;
 		Descriptors m_VkDescriptors;
 		SwapChain m_VkSwapChain;
+		Model m_VkModel;
 
 	private:
 		void InitWindow();

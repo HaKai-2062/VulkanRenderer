@@ -1,7 +1,6 @@
 #include <iostream>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <vulkan/vulkan_core.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
@@ -12,6 +11,8 @@
 
 namespace VE
 {
+	const static std::string TEXTURE_PATH = "../../../src/textures/viking_room.png";
+
 	static auto getDevice = []() -> VkDevice&
 		{
 			return Application::GetInstance()->m_VkInstance.GetDevice();
@@ -190,7 +191,7 @@ namespace VE
 	void Texture::CreateTextureImage()
 	{
 		int texWidth, texHeight, texChannels;
-		stbi_uc* pixels = stbi_load("../../../src/textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		VkDeviceSize imageSize = texWidth * texHeight * 4;
 
 		if (!pixels)

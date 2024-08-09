@@ -89,6 +89,8 @@ namespace VE
 		m_VkTexture.CreateTextureImageView();
 		m_VkTexture.CreateTextureSampler();
 
+		m_VkModel.LoadModel();
+
 		m_VkBuffers.CreateVertexBuffer();
 		m_VkBuffers.CreateIndexBuffer();
 
