@@ -208,10 +208,12 @@ namespace VE
 
 		vkDeviceWaitIdle(getDevice());
 
+		m_VkBuffers.DestroyDepthImage();
 		m_VkSwapChain.~SwapChain();
 
 		m_VkSwapChain.CreateSwapChain();
 		m_VkSwapChain.CreateImageViews();
+		m_VkBuffers.CreateDepthResources();
 		m_VkSwapChain.CreateFramebuffers();
 	}
 

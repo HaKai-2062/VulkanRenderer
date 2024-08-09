@@ -24,6 +24,7 @@ namespace VE
 		void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
 		static VkFormat FindDepthFormat();
 		static uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+		void DestroyDepthImage();
 		
 		std::vector<VkCommandBuffer>& GetCommandBuffers() { return m_CommandBuffers; }
 		VkImageView& GetDepthImageView() { return m_DepthImageView; }

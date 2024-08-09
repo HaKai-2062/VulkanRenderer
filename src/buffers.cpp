@@ -68,9 +68,7 @@ namespace VE
 
 	Buffers::~Buffers()
 	{
-		vkDestroyImageView(getDevice(), m_DepthImageView, nullptr);
-		vkDestroyImage(getDevice(), m_DepthImage, nullptr);
-		vkFreeMemory(getDevice(), m_DepthImageMemory, nullptr);
+		DestroyDepthImage();
 
 		vkDestroyBuffer(getDevice(), m_VertexBuffer, nullptr);
 		vkFreeMemory(getDevice(), m_VertexBufferMemory, nullptr);
@@ -81,6 +79,13 @@ namespace VE
 		vkDestroyCommandPool(getDevice(), m_CommandPool, nullptr);
 
 		std::cout << "Buffers Destroyed" << std::endl;
+	}
+
+	void Buffers::DestroyDepthImage()
+	{
+		vkDestroyImageView(getDevice(), m_DepthImageView, nullptr);
+		vkDestroyImage(getDevice(), m_DepthImage, nullptr);
+		vkFreeMemory(getDevice(), m_DepthImageMemory, nullptr);
 	}
 
 	void Buffers::CreateCommandPool()
