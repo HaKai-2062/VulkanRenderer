@@ -118,7 +118,7 @@ namespace VE
 		}
 		else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
 		{
-			throw std::runtime_error("failed to acquire swap chain image!");
+			throw std::runtime_error("Failed to acquire swap chain image!");
 		}
 
 		m_VkDescriptors.UpdateUniformBuffer(m_CurrentFrame);
@@ -144,7 +144,7 @@ namespace VE
 
 		if (vkQueueSubmit(getGraphicsQueue(), 1, &submitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS)
 		{
-			throw std::runtime_error("failed to submit draw command buffer!");
+			throw std::runtime_error("Failed to submit draw command buffer!");
 		}
 
 		VkPresentInfoKHR presentInfo{};
@@ -167,7 +167,7 @@ namespace VE
 		}
 		else if (result != VK_SUCCESS)
 		{
-			throw std::runtime_error("failed to present swap chain image!");
+			throw std::runtime_error("Failed to present swap chain image!");
 		}
 
 		m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -192,7 +192,7 @@ namespace VE
 				vkCreateSemaphore(getDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
 				vkCreateFence(getDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
 			{
-				throw std::runtime_error("failed to create synchronization objects for a frame!");
+				throw std::runtime_error("Failed to create synchronization objects for a frame!");
 			}
 		}
 	}

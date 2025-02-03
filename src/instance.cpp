@@ -131,6 +131,8 @@ namespace VE
 		std::vector<VkPhysicalDevice> devices(deviceCount);
 		vkEnumeratePhysicalDevices(m_Instance, &deviceCount, devices.data());
 
+		uint32_t maxScore = std::numeric_limits<uint32_t>::min();
+
 		for (const auto& device : devices)
 		{
 			VkPhysicalDeviceProperties deviceProperties;
@@ -146,16 +148,35 @@ namespace VE
 				VK_API_VERSION_MINOR(apiVersion),
 				VK_API_VERSION_PATCH(apiVersion));
 
-			if (IsDeviceSuitable(device))
+			int score = 0;
+			// Discrete GPUs have a significant performance advantage
+			if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+			{
+				score += 1000;
+			}
+			// Maximum possible size of textures affects graphics quality
+			score += deviceProperties.limits.maxImageDimension2D;
+
+			VkPhysicalDeviceFeatures deviceFeatures;
+			vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+			// Application can't function without geometry shaders
+			if (!deviceFeatures.geometryShader)
+			{
+				score = 0;
+			}
+
+			if (IsDeviceSuitable(device) && score > maxScore)
 			{
 				printf("	Suitable: Yes\n");
+				printf("	Score: %d\n", score);
 				m_PhysicalDevice = device;
-				setMSAASamples(GetMaxUsableSampleCount());
-				break;
+				maxScore = score;
+				// break;
 			}
 			else
 			{
 				printf("	Suitable: No\n");
+				printf("	Score: %d\n", score);
 			}
 		}
 
@@ -165,6 +186,8 @@ namespace VE
 		{
 			throw std::runtime_error("failed to find a suitable GPU!");
 		}
+
+		setMSAASamples(GetMaxUsableSampleCount());
 	}
 
 	void Instance::CreateLogicalDevice()

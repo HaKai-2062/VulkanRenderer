@@ -1,7 +1,13 @@
 ﻿# CMakeList.txt : CMake project for VulkanRenderer, include source and define
 # project specific logic here.
 #
-cmake_minimum_required (VERSION 3.8)
+cmake_minimum_required (VERSION 3.15)
+
+# Set the vcpkg toolchain path
+set(CMAKE_TOOLCHAIN_FILE "C:/Data/Coding/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file" FORCE)
+
+# Set the vcpkg installation prefix path
+set(CMAKE_PREFIX_PATH "C:/Data/Coding/vcpkg/installed/x64-windows/share" CACHE STRING "Vcpkg prefix path" FORCE)
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
@@ -17,8 +23,6 @@ else()
 endif()
 
 project ("VulkanRenderer")
-
-add_subdirectory(Dependencies/tinyobjloader)
 
 file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_executable ("${CMAKE_PROJECT_NAME}")
@@ -37,14 +41,21 @@ if(MSVC) # If using the VS compiler...
 
 endif()
 
-target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC 
-"C:/VulkanSDK/1.3.283.0/Include/"
-"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glfw-3.4.bin.WIN64/include/"
-"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/stb/"
-"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/tinyobjloader/"
-"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glm/")
+find_package(glfw3 CONFIG REQUIRED)
+target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE glfw)
 
-target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE 
-"C:/VulkanSDK/1.3.283.0/Lib/vulkan-1.lib" 
-"${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/glfw-3.4.bin.WIN64/lib-vc2022/glfw3.lib"
-tinyobjloader)
+find_package(glm CONFIG REQUIRED)
+target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE glm::glm)
+# target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE glm::glm-header-only)
+
+find_package(imgui CONFIG REQUIRED)
+target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE imgui::imgui)
+
+find_package(Stb REQUIRED)
+target_include_directories("${CMAKE_PROJECT_NAME}" PRIVATE ${Stb_INCLUDE_DIR})
+
+find_package(tinyobjloader CONFIG REQUIRED)
+target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE tinyobjloader::tinyobjloader)
+
+find_package(Vulkan REQUIRED)
+target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE Vulkan::Vulkan)
