@@ -4,6 +4,11 @@
 
 #include <vulkan/vulkan_core.h>
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 namespace VE
 {
 	class Descriptors
@@ -16,7 +21,7 @@ namespace VE
 		void CreateDescriptorPool();
 		void CreateDescriptorSets();
 		void CreateDescriptorSetLayout();
-		void UpdateUniformBuffer(uint32_t currentImage);
+		void UpdateUniformBuffer(uint32_t currentImage, glm::mat4& viewMatrix);
 
 		VkDescriptorSetLayout& GetDescriptorSetLayout() { return m_DescriptorSetLayout; }
 		std::vector<VkDescriptorSet>& GetDescriptorSets() { return m_DescriptorSets; }

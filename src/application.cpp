@@ -10,6 +10,12 @@
 namespace VE
 {
 	Application* Application::s_Application = nullptr;
+	int Application::WIDTH = 1280;
+	int Application::HEIGHT = 720;
+	Camera Application::m_Camera;
+
+	static glm::vec2 lastMousePos{ Application::WIDTH / 2.0f, Application::HEIGHT / 2.0f };
+	bool firstMouse = true;
 	
 	static auto getDevice = []() -> VkDevice&
 		{
@@ -23,8 +29,6 @@ namespace VE
 		{
 			return Application::GetInstance()->m_VkSwapChain.GetSwapChain();
 		};
-
-	void addFPSToTitle(GLFWwindow* window);
 
 	Application::~Application()
 	{
@@ -43,6 +47,8 @@ namespace VE
 
 		InitWindow();
 		InitVulkan();
+		glfwSetCursorPosCallback(m_Window, Application::ProcessMouseInput);
+		glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		MainLoop();
 	}
 
@@ -58,9 +64,11 @@ namespace VE
 	{
 		while (!glfwWindowShouldClose(m_Window))
 		{
-			glfwPollEvents();
+			ProcessKeyboardInputs();
+
 			DrawFrame();
-			addFPSToTitle(m_Window);
+			AddFPSToTitle();
+			glfwPollEvents();
 		}
 
 		vkDeviceWaitIdle(getDevice());
@@ -121,7 +129,9 @@ namespace VE
 			throw std::runtime_error("Failed to acquire swap chain image!");
 		}
 
-		m_VkDescriptors.UpdateUniformBuffer(m_CurrentFrame);
+		glm::mat4 cameraViewMatrix = m_Camera.GetViewMatrix();
+
+		m_VkDescriptors.UpdateUniformBuffer(m_CurrentFrame, cameraViewMatrix);
 
 		vkResetFences(getDevice(), 1, &m_InFlightFences[m_CurrentFrame]);
 		vkResetCommandBuffer(m_VkBuffers.GetCommandBuffers()[m_CurrentFrame], 0);
@@ -231,27 +241,63 @@ namespace VE
 		}
 	}
 
-	void addFPSToTitle(GLFWwindow* window)
+	void Application::AddFPSToTitle()
 	{
 		static float lastTime = 0.0f;
 		static uint32_t nFrames = 0;
 
 		float currentTime = static_cast<float>(glfwGetTime());
-		float delta = currentTime - lastTime;
+		m_DeltaTime = currentTime - lastTime;
 		nFrames++;
 
-		if (delta >= 1.0)
+		if (m_DeltaTime >= 1.0)
 		{
-			uint32_t fps = static_cast<uint32_t>(nFrames / delta);
+			uint32_t fps = static_cast<uint32_t>(nFrames / m_DeltaTime);
 
 			float delay = static_cast<uint32_t>(100'000.0f / nFrames) / 100.0f;
 
 			std::stringstream ss;
 			ss << "Vulkan Engine" << "    [FPS: " << fps << "]     " << "[" << delay << " ms]";
-			glfwSetWindowTitle(window, ss.str().c_str());
+			glfwSetWindowTitle(m_Window, ss.str().c_str());
 
 			nFrames = 0;
 			lastTime = currentTime;
 		}
 	}
+	void Application::ProcessKeyboardInputs()
+	{
+		if (glfwGetKey(m_Window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+			glfwSetWindowShouldClose(m_Window, true);
+
+		if (glfwGetKey(m_Window, GLFW_KEY_W) == GLFW_PRESS)
+			m_Camera.ProcessCameraPosition(CameraMotion::FORWARD, m_DeltaTime);
+		if (glfwGetKey(m_Window, GLFW_KEY_S) == GLFW_PRESS)
+			m_Camera.ProcessCameraPosition(CameraMotion::BACKWARD, m_DeltaTime);
+		if (glfwGetKey(m_Window, GLFW_KEY_A) == GLFW_PRESS)
+			m_Camera.ProcessCameraPosition(CameraMotion::LEFT, m_DeltaTime);
+		if (glfwGetKey(m_Window, GLFW_KEY_D) == GLFW_PRESS)
+			m_Camera.ProcessCameraPosition(CameraMotion::RIGHT, m_DeltaTime);
+		if (glfwGetKey(m_Window, GLFW_KEY_Q) == GLFW_PRESS)
+			m_Camera.ProcessCameraPosition(CameraMotion::DOWN, m_DeltaTime);
+		if (glfwGetKey(m_Window, GLFW_KEY_E) == GLFW_PRESS)
+			m_Camera.ProcessCameraPosition(CameraMotion::UP, m_DeltaTime);
+	}
+
+	void Application::ProcessMouseInput(GLFWwindow* window, double xPosIn, double yPosIn)
+	{
+		glm::vec2 mousePos = { static_cast<float>(xPosIn),  static_cast<float>(yPosIn) };
+
+		if (firstMouse)
+		{
+			lastMousePos = mousePos;
+			firstMouse = false;
+		}
+		
+		glm::vec2 mouseOffset = { mousePos.x - lastMousePos.x, lastMousePos.y - mousePos.y };
+
+		lastMousePos = mousePos;
+
+		m_Camera.ProcessCameraDirection(mouseOffset);
+	}
+
 }

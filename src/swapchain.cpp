@@ -169,8 +169,8 @@ namespace VE
 
 	VkPresentModeKHR SwapChain::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
 	{
-		// To disable vsync
-		return VK_PRESENT_MODE_IMMEDIATE_KHR;
+		// This disables vsync and gives most fps
+		//return VK_PRESENT_MODE_IMMEDIATE_KHR;
 
 		for (const auto& availablePresentMode : availablePresentModes)
 		{
