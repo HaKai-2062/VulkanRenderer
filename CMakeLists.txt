@@ -3,11 +3,6 @@
 #
 cmake_minimum_required (VERSION 3.15)
 
-# Set the vcpkg toolchain path
-set(CMAKE_TOOLCHAIN_FILE "C:/Data/Coding/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file" FORCE)
-
-# Set the vcpkg installation prefix path
-set(CMAKE_PREFIX_PATH "C:/Data/Coding/vcpkg/installed/x64-windows/share" CACHE STRING "Vcpkg prefix path" FORCE)
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
@@ -15,19 +10,72 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+if (CMAKE_BUILD_TYPE STREQUAL "x64 Debug")
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDebug")
 else()
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 endif()
+
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DVK_PROTOTYPES")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVK_PROTOTYPES")
+#set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE) #link time optimization
 
 project ("VulkanRenderer")
 
-file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
-add_executable ("${CMAKE_PROJECT_NAME}")
-target_sources("${CMAKE_PROJECT_NAME}" PRIVATE ${MY_SOURCES})
+include(FetchContent)
+
+function(CloneRepository repositoryURL branchName projectName sourceDir customCMakePath)
+	message("Starting to clone ${projectName} into ${sourceDir}")
+		
+	FetchContent_Declare(
+		"${projectName}"
+		GIT_REPOSITORY "${repositoryURL}"
+		SOURCE_DIR "${sourceDir}"
+		GIT_TAG "origin/${branchName}"
+		SOURCE_SUBDIR  "${customCMakePath}"
+		CONFIGURE_COMMAND ""
+		BUILD_COMMAND ""
+		INSTALL_COMMAND ""
+	)
+
+	FetchContent_MakeAvailable(${projectName})
+
+endfunction(CloneRepository)
+
+CloneRepository("https://github.com/glfw/glfw.git" "master" "GLFW" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/GLFW" "")
+CloneRepository("https://github.com/ocornut/imgui.git" "docking" "imgui-docking" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking" "../CMake/imgui-docking")
+CloneRepository("https://github.com/g-truc/glm.git" "master" "GLM" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm" "")
+CloneRepository("https://github.com/nothings/stb.git" "master" "STB" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb" "")
+CloneRepository("https://github.com/tinyobjloader/tinyobjloader.git" "release" "tinyobjloader" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader" "")
+
+
+option(GLFW_BUILD_EXAMPLES "Build the GLFW example programs" OFF)
+option(GLFW_BUILD_TESTS "Build the GLFW test programs" OFF)
+option(GLFW_BUILD_DOCS "Build the GLFW documentation" OFF)
+option(GLFW_INSTALL "Generate installation target" OFF)
+option(GLFW_DOCUMENT_INTERNALS "Include internals in documentation" OFF)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+add_subdirectory(vendor/GLFW)
+add_subdirectory(vendor/glm)
+add_subdirectory(vendor/tinyobjloader)
+
+# Dont specify dirs with custom CMakefiles.txt that arent in Git repo?
+#add_subdirectory(vendor/CMake/imgui-docking)
+
+file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS 
+"${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/imgui_impl_glfw.cpp"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/imgui_impl_vulkan.cpp")
+
+add_executable("${CMAKE_PROJECT_NAME}")
+
 set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY CXX_STANDARD 20)
+
+target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC 
+GLFW_INCLUDE_NONE=1)
+
+target_sources("${CMAKE_PROJECT_NAME}" PRIVATE ${MY_SOURCES})
 
 if(MSVC) # If using the VS compiler...
 
@@ -41,21 +89,21 @@ if(MSVC) # If using the VS compiler...
 
 endif()
 
-find_package(glfw3 CONFIG REQUIRED)
-target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE glfw)
-
-find_package(glm CONFIG REQUIRED)
-target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE glm::glm)
-# target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE glm::glm-header-only)
-
-find_package(imgui CONFIG REQUIRED)
-target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE imgui::imgui)
-
-find_package(Stb REQUIRED)
-target_include_directories("${CMAKE_PROJECT_NAME}" PRIVATE ${Stb_INCLUDE_DIR})
-
-find_package(tinyobjloader CONFIG REQUIRED)
-target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE tinyobjloader::tinyobjloader)
-
 find_package(Vulkan REQUIRED)
-target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE Vulkan::Vulkan)
+
+target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC 
+"${CMAKE_CURRENT_SOURCE_DIR}/include"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/GLFW/include"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm/glm"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb/"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader"
+"${Vulkan_INCLUDE_DIRS}")
+
+target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE 
+glfw
+imgui
+glm
+tinyobjloader
+${Vulkan_LIBRARIES})

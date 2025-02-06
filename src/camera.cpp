@@ -1,5 +1,4 @@
 #include "camera.hpp"
-#include <iostream>
 
 namespace VE
 {
