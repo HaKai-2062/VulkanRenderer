@@ -2,7 +2,7 @@
 
 namespace VE
 {
-	Camera::Camera(glm::vec3 position, glm::vec3 up)
+	void Camera::Init(glm::vec3 position, glm::vec3 up)
 	{
 		m_Yaw = -90.0f;
 		m_Pitch = 0.0f;

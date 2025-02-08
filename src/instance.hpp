@@ -32,6 +32,7 @@ namespace VE
 		VkSurfaceKHR& GetSurface() { return m_Surface; }
 		VkQueue& GetGraphicsQueue() { return m_GraphicsQueue; }
 		VkQueue& GetPresentQueue() { return m_PresentQueue; }
+		VkInstance& GetVkInstance() { return m_Instance; }
 
 		void CreateInstance();
 		void SetupDebugMessenger();

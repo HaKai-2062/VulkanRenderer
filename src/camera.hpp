@@ -12,9 +12,10 @@ namespace VE
 	class Camera
 	{
 	public:
-		Camera(glm::vec3 position = glm::vec3(2.0f, 1.0f, 2.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f));
-
+		Camera() = default;
 		~Camera() = default;
+
+		void Init(glm::vec3 position = glm::vec3(2.0f, 1.0f, 2.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f));
 		void ProcessCameraPosition(CameraMotion direction, float deltaTime);
 		void ProcessCameraDirection(glm::vec2 mouseoffset, bool constrainedPitch = true);
 		glm::mat4 GetViewMatrix();

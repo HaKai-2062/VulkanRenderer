@@ -47,8 +47,8 @@ namespace VE
 
 		InitWindow();
 		InitVulkan();
-		glfwSetCursorPosCallback(m_Window, Application::ProcessMouseInput);
-		glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		InitStates();
+
 		MainLoop();
 	}
 
@@ -110,6 +110,12 @@ namespace VE
 		m_VkBuffers.CreateCommandBuffer();
 		
 		CreateSyncObjects();
+	}
+
+	void Application::InitStates()
+	{
+		glfwSetCursorPosCallback(m_Window, Application::ProcessMouseInput);
+		m_Camera.Init();
 	}
 
 	void Application::DrawFrame()
@@ -266,6 +272,11 @@ namespace VE
 	}
 	void Application::ProcessKeyboardInputs()
 	{
+		for (int key = 0; key < GLFW_KEY_LAST; key++)
+		{
+			m_CurrentKeyState[key] = glfwGetKey(m_Window, key) == GLFW_PRESS;
+		}
+
 		if (glfwGetKey(m_Window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 			glfwSetWindowShouldClose(m_Window, true);
 
@@ -281,10 +292,27 @@ namespace VE
 			m_Camera.ProcessCameraPosition(CameraMotion::DOWN, m_DeltaTime);
 		if (glfwGetKey(m_Window, GLFW_KEY_E) == GLFW_PRESS)
 			m_Camera.ProcessCameraPosition(CameraMotion::UP, m_DeltaTime);
+
+		// Trigger only on key release
+		if (m_PreviousKeyState[GLFW_KEY_M] && !m_CurrentKeyState[GLFW_KEY_M])
+		{
+			if (m_MouseLocked)
+				glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			else
+				glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+			m_MouseLocked = !m_MouseLocked;
+		}
+
+		m_PreviousKeyState = m_CurrentKeyState;
 	}
 
 	void Application::ProcessMouseInput(GLFWwindow* window, double xPosIn, double yPosIn)
 	{
+		if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL)
+			return;
+
+
 		glm::vec2 mousePos = { static_cast<float>(xPosIn),  static_cast<float>(yPosIn) };
 
 		if (firstMouse)

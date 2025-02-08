@@ -47,6 +47,7 @@ namespace VE
 	private:
 		void InitWindow();
 		void InitVulkan();
+		void InitStates();
 		void MainLoop();
 		void RecreateSwapChain();
 		void AddFPSToTitle();
@@ -64,8 +65,12 @@ namespace VE
 		std::vector<VkSemaphore> m_RenderFinishedSemaphores;
 		std::vector<VkFence> m_InFlightFences;
 		uint32_t m_CurrentFrame = 0;
-		bool m_FramebufferResized = false;
 		float m_DeltaTime;
+		bool m_FramebufferResized = false;
+
+		bool m_MouseLocked = false;
+		std::array<bool, GLFW_KEY_LAST> m_PreviousKeyState;
+		std::array<bool, GLFW_KEY_LAST> m_CurrentKeyState;
 
 		//CommandBuffer m_CommandBuffer;
 		//Model m_Model;
