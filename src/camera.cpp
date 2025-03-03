@@ -11,18 +11,26 @@ namespace VE
 		m_Zoom = 45.0f;
 
 		m_Position = position;
-		m_WorldUp = up;
-		
-		UpdateCameraVectors();
+		m_Up = up;
+
+		m_Up = glm::vec3(0.0f, 1.0f, 0.0f);
+		m_Orientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 	}
 
 	glm::mat4 Camera::GetViewMatrix()
 	{
+		m_Front = m_Orientation * glm::vec3(0.0f, 0.0f, -1.0f);
+		m_Up = m_Orientation * glm::vec3(0.0f, 1.0f, 0.0f);
 		return glm::lookAt(m_Position, m_Position + m_Front, m_Up);
 	}
 
 	void Camera::ProcessCameraPosition(CameraMotion direction, float deltaTime)
 	{
+		m_Front = m_Orientation * glm::vec3(0.0f, 0.0f, -1.0f);
+		m_Right = m_Orientation * glm::vec3(1.0f, 0.0f, 0.0f);
+		//m_Up = m_Orientation * glm::vec3(0.0f, 1.0f, 0.0f);
+		glm::vec3 localUp = glm::vec3(0.0f, 0.0f, 1.0f);
+
 		float velocity = m_Speed * deltaTime;
 		if (direction == CameraMotion::FORWARD)
 			m_Position += m_Front * velocity;
@@ -33,17 +41,17 @@ namespace VE
 		if (direction == CameraMotion::RIGHT)
 			m_Position += m_Right * velocity;
 		if (direction == CameraMotion::UP)
-			m_Position += m_Up * velocity;
+			m_Position += localUp * velocity;
 		if (direction == CameraMotion::DOWN)
-			m_Position -= m_Up * velocity;
+			m_Position -= localUp * velocity;
 
 		// True fps cam
-		m_Position.y = 0.0f;
+		//m_Position.y = 0.0f;
 	}
 
 	void Camera::ProcessCameraDirection(glm::vec2 mouseOffset, bool constrainedPitch)
 	{
-		m_Yaw += mouseOffset.x * m_Sensitivity;
+		m_Yaw -= mouseOffset.x * m_Sensitivity;
 		m_Pitch += mouseOffset.y * m_Sensitivity;
 
 		if (constrainedPitch)
@@ -54,19 +62,9 @@ namespace VE
 				m_Pitch = -89.0f;
 		}
 
-		UpdateCameraVectors();
-	}
-
-	void Camera::UpdateCameraVectors()
-	{
-		// Calculate Front, Right and Up
-		m_Front = glm::vec3(cos(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch)),
-			sin(glm::radians(m_Pitch)),
-			sin(glm::radians(m_Yaw) * cos(glm::radians(m_Pitch))));
-		m_Front = glm::normalize(m_Front);
-
-		// OpenGL: Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement
-		m_Right = glm::normalize(glm::cross(m_Front, m_WorldUp));
-		m_Up = glm::normalize(glm::cross(m_Right, m_Front));
+		glm::quat yawQuat = glm::angleAxis(glm::radians(m_Yaw), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::quat pitchQuat = glm::angleAxis(glm::radians(m_Pitch), glm::vec3(1.0f, 0.0f, 0.0f));
+		m_Orientation = pitchQuat * yawQuat;
+		m_Orientation = glm::normalize(m_Orientation);
 	}
 }
