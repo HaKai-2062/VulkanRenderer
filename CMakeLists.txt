@@ -3,7 +3,6 @@
 #
 cmake_minimum_required (VERSION 3.15)
 
-
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
@@ -47,7 +46,10 @@ CloneRepository("https://github.com/ocornut/imgui.git" "docking" "imgui-docking"
 CloneRepository("https://github.com/g-truc/glm.git" "master" "GLM" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm" "")
 CloneRepository("https://github.com/nothings/stb.git" "master" "STB" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb" "")
 CloneRepository("https://github.com/tinyobjloader/tinyobjloader.git" "release" "tinyobjloader" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader" "")
-
+CloneRepository("https://github.com/charles-lunarg/vk-bootstrap.git" "main" "vk-bootstrap" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/vk-bootstrap" "")
+CloneRepository("https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git" "master" "VulkanMemoryAllocator" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/VMA" "")
+CloneRepository("https://github.com/fmtlib/fmt.git" "master" "fmt" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/fmt" "")
+CloneRepository("https://github.com/spnda/fastgltf.git" "main" "fastgltf" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/fastgltf" "")
 
 option(GLFW_BUILD_EXAMPLES "Build the GLFW example programs" OFF)
 option(GLFW_BUILD_TESTS "Build the GLFW test programs" OFF)
@@ -59,23 +61,32 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory(vendor/GLFW)
 add_subdirectory(vendor/glm)
 add_subdirectory(vendor/tinyobjloader)
+add_subdirectory(vendor/vk-bootstrap)
+add_subdirectory(vendor/VMA)
+add_subdirectory(vendor/fmt)
+add_subdirectory(vendor/fastgltf)
 
 # Dont specify dirs with custom CMakefiles.txt that arent in Git repo?
 #add_subdirectory(vendor/CMake/imgui-docking)
 
 file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS 
-"${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/imgui_impl_glfw.cpp"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/imgui_impl_vulkan.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/imgui_impl_glfw.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/imgui_impl_vulkan.cpp"
+)
+source_group("Source Files" FILES ${MY_SOURCES})
+file(GLOB_RECURSE MY_HEADERS CONFIGURE_DEPENDS 
+	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+)
+source_group("Header Files" FILES ${MY_HEADERS})
 
-add_executable("${CMAKE_PROJECT_NAME}")
-
+add_executable("${CMAKE_PROJECT_NAME}" ${MY_SOURCES} ${MY_HEADERS})
 set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY CXX_STANDARD 20)
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT VulkanRenderer)
 
 target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC 
 GLFW_INCLUDE_NONE=1)
 
-target_sources("${CMAKE_PROJECT_NAME}" PRIVATE ${MY_SOURCES})
 
 if(MSVC) # If using the VS compiler...
 
@@ -99,6 +110,8 @@ target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC
 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm/glm"
 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb/"
 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/vk-bootstrap"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/VMA"
 "${Vulkan_INCLUDE_DIRS}")
 
 target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE 
@@ -106,4 +119,8 @@ glfw
 imgui
 glm
 tinyobjloader
+vk-bootstrap
+VulkanMemoryAllocator
+fmt
+fastgltf
 ${Vulkan_LIBRARIES})

@@ -1,22 +1,12 @@
-#include <iostream>
-#include <cstdlib>
-#include <stdexcept>
+#include "vk_engine.h"
 
-#include "application.hpp"
-
-int main()
+int main(int argc, char* argv[])
 {
-	VE::Application app;
+	VulkanEngine engine;
 
-	try
-	{
-		app.Run();
-	}
-	catch (const std::exception& e)
-	{
-		std::cerr << e.what() << std::endl;
-		return EXIT_FAILURE;
-	}
+	engine.Init();
+	engine.MainLoop();
+	engine.Cleanup();
 
-	return EXIT_SUCCESS;
+	return 0;
 }

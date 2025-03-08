@@ -1,6 +1,6 @@
 # From : https://github.com/meemknight/cmakeSetup/blob/master/thirdparty/imgui-docking/CMakeLists.txt
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15)
 project(imgui)
 
 add_library(imgui)
