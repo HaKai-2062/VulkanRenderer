@@ -1,3 +1,3 @@
 # VulkanRenderer
 
-Resource: https://vulkan-tutorial.com
+Resource: https://vkguide.dev
