@@ -1,12 +1,29 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include <vulkan/vk_enum_string_helper.h>
 #include <vk_mem_alloc.h>
+#include <fmt/core.h>
+#include <fmt/os.h>
+#include <fmt/color.h>
 
 #include <deque>
 #include <functional>
 
 constexpr unsigned int MAX_FRAMES_IN_FLIGHT = 2;
+
+#define VK_CHECK(x)                                                 \
+	do                                                              \
+	{                                                               \
+		VkResult err = x;                                           \
+		if (err)                                                    \
+		{                                                           \
+			fmt::print("{} {}\n",\
+				fmt::styled("Vulkan error:", fmt::fg(fmt::color::red) | fmt::emphasis::bold),\
+				fmt::styled(string_VkResult(err), fmt::fg(fmt::color::yellow)));\
+			abort();                                                \
+		}                                                           \
+	} while (0)
 
 struct DeletionQueue
 {

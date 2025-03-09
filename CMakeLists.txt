@@ -69,6 +69,12 @@ add_subdirectory(vendor/fastgltf)
 # Dont specify dirs with custom CMakefiles.txt that arent in Git repo?
 #add_subdirectory(vendor/CMake/imgui-docking)
 
+file(GLOB_RECURSE GLSL_SOURCE_FILES CONFIGURE_DEPENDS 
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp"
+    )
+source_group("Shader Files" FILES ${GLSL_SOURCE_FILES})
 file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/imgui_impl_glfw.cpp"
@@ -80,13 +86,9 @@ file(GLOB_RECURSE MY_HEADERS CONFIGURE_DEPENDS
 )
 source_group("Header Files" FILES ${MY_HEADERS})
 
-add_executable("${CMAKE_PROJECT_NAME}" ${MY_SOURCES} ${MY_HEADERS})
+add_executable("${CMAKE_PROJECT_NAME}" ${MY_SOURCES} ${MY_HEADERS} ${GLSL_SOURCE_FILES})
 set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY CXX_STANDARD 20)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT VulkanRenderer)
-
-target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC 
-GLFW_INCLUDE_NONE=1)
-
 
 if(MSVC) # If using the VS compiler...
 
@@ -101,6 +103,12 @@ if(MSVC) # If using the VS compiler...
 endif()
 
 find_package(Vulkan REQUIRED)
+find_program(GLSL_VALIDATOR glslangValidator REQUIRED HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
+
+target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC 
+GLFW_INCLUDE_NONE=1
+SHADER_PATH="${CMAKE_SOURCE_DIR}/shaders/"
+)
 
 target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC 
 "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -124,3 +132,20 @@ VulkanMemoryAllocator
 fmt
 fastgltf
 ${Vulkan_LIBRARIES})
+
+# Compile all shaders
+foreach(GLSL ${GLSL_SOURCE_FILES})
+  message(STATUS "BUILDING SHADER")
+  get_filename_component(FILE_NAME ${GLSL} NAME)
+  set(SPIRV "${PROJECT_SOURCE_DIR}/shaders/${FILE_NAME}.spv")
+  message(STATUS ${GLSL})
+  message(STATUS COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV})
+  add_custom_command(
+    OUTPUT ${SPIRV}
+    COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
+    DEPENDS ${GLSL})
+  list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+endforeach(GLSL)
+
+add_custom_target(Shaders DEPENDS ${SPIRV_BINARY_FILES})
+add_dependencies(${CMAKE_PROJECT_NAME} Shaders)

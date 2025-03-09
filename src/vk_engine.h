@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "vk_types.h"
+#include "vk_descriptors.h"
 
 class VulkanEngine
 {
@@ -14,11 +15,12 @@ public:
 	VkExtent2D m_WindowExtent{ 1700 , 900 };
 	struct GLFWwindow* m_Window{ nullptr };
 
+	VkExtent2D m_DrawExtent;
 	FrameData m_Frames[MAX_FRAMES_IN_FLIGHT];
-	DeletionQueue m_DeletionQueue;
+	DeletionQueue m_MainDeletionQueue;
 	VmaAllocator m_Allocator;
 	AllocatedImage m_DrawImage;
-	VkExtent2D m_DrawExtent;
+	DescriptorAllocator m_GlobalDescriptorAllocator;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -32,6 +34,10 @@ public:
 	std::vector<VkImage> m_SwapchainImages;
 	std::vector<VkImageView> m_SwapchainImageViews;
 	VkExtent2D m_SwapchainExtent;
+	VkDescriptorSet m_DrawImageDescriptors;
+	VkDescriptorSetLayout m_DrawImageDescriptorLayout;
+	VkPipeline m_GradientPipeline;
+	VkPipelineLayout m_GradientPipelineLayout;
 
 public:
 	
@@ -48,6 +54,9 @@ private:
 	void InitSwapchain();
 	void InitCommands();
 	void InitSyncStructures();
+	void InitDescriptors();
+	void InitPipelines();
+	void InitBackgroundPipelines();
 
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();

@@ -1,4 +1,3 @@
-#include <iostream>
 #include <sstream>
 
 #define GLFW_INCLUDE_VULKAN
@@ -11,6 +10,7 @@
 #include "vk_initializers.h"
 #include "vk_images.h"
 #include "vk_engine.h"
+#include "vk_pipelines.h"
 
 #ifdef NDEBUG
 static const bool bUseValidationLayers = false;
@@ -18,19 +18,10 @@ static const bool bUseValidationLayers = false;
 static const bool bUseValidationLayers = true;
 #endif
 
-#define VK_CHECK(x)                                                 \
-	do                                                              \
-	{                                                               \
-		VkResult err = x;                                           \
-		if (err)                                                    \
-		{                                                           \
-			std::cout <<"Detected Vulkan error: " << err << std::endl; \
-			abort();                                                \
-		}                                                           \
-	} while (0)
-
 void VulkanEngine::Init()
 {
+	fmt::print(fmt::fg(fmt::color::green), "Application Created\n");
+
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
@@ -40,6 +31,8 @@ void VulkanEngine::Init()
 	InitSwapchain();
 	InitCommands();
 	InitSyncStructures();
+	InitDescriptors();
+	InitPipelines();
 
 	m_IsInitialized = true;
 }
@@ -61,7 +54,7 @@ void VulkanEngine::Cleanup()
 		}
 
 		// Flush global deletion queue
-		m_DeletionQueue.flush();
+		m_MainDeletionQueue.flush();
 
 		DestroySwapchain();
 		vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
@@ -73,7 +66,7 @@ void VulkanEngine::Cleanup()
 		vkDestroyInstance(m_Instance, nullptr);
 		glfwTerminate();
 
-		std::cout << "Application Destroyed" << std::endl;
+		fmt::print(fmt::fg(fmt::color::yellow) | fmt::bg(fmt::color::black), "Application Destroyed\n");
 	}
 }
 
@@ -200,7 +193,9 @@ void VulkanEngine::InitVulkan()
 	
 	if (bUseValidationLayers)
 	{
-		std::cout << "GPU: " << deviceProperties.deviceName << std::endl;
+		fmt::print("{} {}\n", \
+			fmt::styled("GPU: ", fmt::fg(fmt::color::white) | fmt::emphasis::bold), \
+			fmt::styled(deviceProperties.deviceName, fmt::fg(fmt::color::green_yellow)));\
 	}
 
 	m_GraphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
@@ -213,7 +208,7 @@ void VulkanEngine::InitVulkan()
 	// To use GPU pointers
 	allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 	vmaCreateAllocator(&allocatorInfo, &m_Allocator);
-	m_DeletionQueue.pushFunction([&]()
+	m_MainDeletionQueue.pushFunction([&]()
 		{
 			vmaDestroyAllocator(m_Allocator);
 		});
@@ -250,7 +245,7 @@ void VulkanEngine::InitSwapchain()
 	VkImageViewCreateInfo imageviewInfo = VkInit::imageviewCreateInfo(m_DrawImage.imageFormat, m_DrawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VK_CHECK(vkCreateImageView(m_Device, &imageviewInfo, nullptr, &m_DrawImage.imageView));
 
-	m_DeletionQueue.pushFunction([&]()
+	m_MainDeletionQueue.pushFunction([&]()
 		{
 			vkDestroyImageView(m_Device, m_DrawImage.imageView, nullptr);
 			vmaDestroyImage(m_Allocator, m_DrawImage.image, m_DrawImage.allocation);
@@ -292,6 +287,96 @@ void VulkanEngine::InitSyncStructures()
 	}
 }
 
+void VulkanEngine::InitDescriptors()
+{
+	//create a descriptor pool that will hold 10 sets with 1 image each
+	std::vector<DescriptorAllocator::PoolSizeRatio> sizes =
+	{
+		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 }
+	};
+
+	m_GlobalDescriptorAllocator.initPool(m_Device, 10, sizes);
+
+	//make the descriptor set layout for our compute draw
+	{
+		DescriptorLayoutBuilder builder;
+		builder.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		m_DrawImageDescriptorLayout = builder.build(m_Device, VK_SHADER_STAGE_COMPUTE_BIT);
+	}
+
+	//allocate a descriptor set for our draw image
+	m_DrawImageDescriptors = m_GlobalDescriptorAllocator.allocate(m_Device, m_DrawImageDescriptorLayout);
+
+	VkDescriptorImageInfo imgInfo{};
+	imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	imgInfo.imageView = m_DrawImage.imageView;
+
+	VkWriteDescriptorSet drawImageWrite = {};
+	drawImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	drawImageWrite.pNext = nullptr;
+
+	drawImageWrite.dstBinding = 0;
+	drawImageWrite.dstSet = m_DrawImageDescriptors;
+	drawImageWrite.descriptorCount = 1;
+	drawImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	drawImageWrite.pImageInfo = &imgInfo;
+
+	vkUpdateDescriptorSets(m_Device, 1, &drawImageWrite, 0, nullptr);
+
+	//make sure both the descriptor allocator and the new layout get cleaned up properly
+	m_MainDeletionQueue.pushFunction([&]()
+		{
+		m_GlobalDescriptorAllocator.destroyPool(m_Device);
+
+		vkDestroyDescriptorSetLayout(m_Device, m_DrawImageDescriptorLayout, nullptr);
+		});
+}
+
+void VulkanEngine::InitPipelines()
+{
+	InitBackgroundPipelines();
+}
+
+void VulkanEngine::InitBackgroundPipelines()
+{
+	VkPipelineLayoutCreateInfo computeLayout{};
+	computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	computeLayout.pNext = nullptr;
+	computeLayout.pSetLayouts = &m_DrawImageDescriptorLayout;
+	computeLayout.setLayoutCount = 1;
+
+	VK_CHECK(vkCreatePipelineLayout(m_Device, &computeLayout, nullptr, &m_GradientPipelineLayout));
+
+	VkShaderModule computeDrawShader;
+	if (!VkUtils::loadShaderModule(SHADER_PATH "gradient.comp.spv", m_Device, &computeDrawShader))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when building the compute shader \n");
+	}
+
+	VkPipelineShaderStageCreateInfo stageinfo{};
+	stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	stageinfo.pNext = nullptr;
+	stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	stageinfo.module = computeDrawShader;
+	stageinfo.pName = "main";
+
+	VkComputePipelineCreateInfo computePipelineCreateInfo{};
+	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	computePipelineCreateInfo.pNext = nullptr;
+	computePipelineCreateInfo.layout = m_GradientPipelineLayout;
+	computePipelineCreateInfo.stage = stageinfo;
+
+	VK_CHECK(vkCreateComputePipelines(m_Device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_GradientPipeline));
+
+	vkDestroyShaderModule(m_Device, computeDrawShader, nullptr);
+
+	m_MainDeletionQueue.pushFunction([&]() {
+		vkDestroyPipelineLayout(m_Device, m_GradientPipelineLayout, nullptr);
+		vkDestroyPipeline(m_Device, m_GradientPipeline, nullptr);
+		});
+
+}
+
 void VulkanEngine::CreateSwapchain(uint32_t width, uint32_t height)
 {
 	vkb::SwapchainBuilder swapchainBuilder{ m_PhysicalDevice, m_Device, m_Surface };
@@ -324,13 +409,22 @@ void VulkanEngine::DestroySwapchain()
 
 void VulkanEngine::DrawBackground(VkCommandBuffer& currentCMD)
 {
-	VkClearColorValue clearValue;
-	float flash = std::abs(std::sin(m_FrameNumber / 120.f));
-	float flash2 = std::abs(std::sin(m_FrameNumber / 120.f + 20.0));
-	float flash3 = std::abs(std::sin(m_FrameNumber / 120.f + 40.0));
-	clearValue = { { flash, flash2, flash3, 1.0f } };
-	VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-	vkCmdClearColorImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+	//VkClearColorValue clearValue;
+	//float flash = std::abs(std::sin(m_FrameNumber / 120.f));
+	//float flash2 = std::abs(std::sin(m_FrameNumber / 120.f + 20.0));
+	//float flash3 = std::abs(std::sin(m_FrameNumber / 120.f + 40.0));
+	//clearValue = { { flash, flash2, flash3, 1.0f } };
+	//VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+	//vkCmdClearColorImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+
+	// bind the gradient drawing compute pipeline
+	vkCmdBindPipeline(currentCMD, VK_PIPELINE_BIND_POINT_COMPUTE, m_GradientPipeline);
+
+	// bind the descriptor set containing the draw image for the compute pipeline
+	vkCmdBindDescriptorSets(currentCMD, VK_PIPELINE_BIND_POINT_COMPUTE, m_GradientPipelineLayout, 0, 1, &m_DrawImageDescriptors, 0, nullptr);
+
+	// execute the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
+	vkCmdDispatch(currentCMD, std::ceil(m_DrawExtent.width / 16.0), std::ceil(m_DrawExtent.height / 16.0), 1);
 }
 
 void VulkanEngine::AddFPSToTitle()
