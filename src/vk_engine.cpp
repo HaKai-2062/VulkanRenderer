@@ -1,7 +1,10 @@
 #include <iostream>
+#include <sstream>
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
 #include <VkBootstrap.h>
 
 #include "vk_types.h"
@@ -48,12 +51,17 @@ void VulkanEngine::Cleanup()
 
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
-			vkDestroyCommandPool(m_Device, m_Frames[i].CommandPool, nullptr);
+			vkDestroyCommandPool(m_Device, m_Frames[i].commandPool, nullptr);
 
-			vkDestroyFence(m_Device, m_Frames[i].RenderFence, nullptr);
-			vkDestroySemaphore(m_Device, m_Frames[i].RenderSemaphore, nullptr);
-			vkDestroySemaphore(m_Device, m_Frames[i].SwapchainSemaphore, nullptr);
+			vkDestroyFence(m_Device, m_Frames[i].renderFence, nullptr);
+			vkDestroySemaphore(m_Device, m_Frames[i].renderSemaphore, nullptr);
+			vkDestroySemaphore(m_Device, m_Frames[i].swapchainSemaphore, nullptr);
+
+			m_Frames[i].deletionQueue.flush();
 		}
+
+		// Flush global deletion queue
+		m_DeletionQueue.flush();
 
 		DestroySwapchain();
 		vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
@@ -72,28 +80,32 @@ void VulkanEngine::Cleanup()
 void VulkanEngine::DrawFrame()
 {
 	// Wait until the gpu has finished rendering the last frame. Timeout of 1e9 ns
-	VK_CHECK(vkWaitForFences(m_Device, 1, &GetCurrentFrame().RenderFence, true, 1000000000));
-	VK_CHECK(vkResetFences(m_Device, 1, &GetCurrentFrame().RenderFence));
+	VK_CHECK(vkWaitForFences(m_Device, 1, &GetCurrentFrame().renderFence, true, 1000000000));
+	GetCurrentFrame().deletionQueue.flush();
+	VK_CHECK(vkResetFences(m_Device, 1, &GetCurrentFrame().renderFence));
 
 	uint32_t swapchainImageIndex;
-	VK_CHECK(vkAcquireNextImageKHR(m_Device, m_Swapchain, 1000000000, GetCurrentFrame().SwapchainSemaphore, nullptr, &swapchainImageIndex));
+	VK_CHECK(vkAcquireNextImageKHR(m_Device, m_Swapchain, 1000000000, GetCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex));
 
-	VkCommandBuffer currentCMD = GetCurrentFrame().CommandBuffer;
+	VkCommandBuffer currentCMD = GetCurrentFrame().commandBuffer;
 	VK_CHECK(vkResetCommandBuffer(currentCMD, 0));
+
+	m_DrawExtent.width = m_DrawImage.imageExtent.width;
+	m_DrawExtent.height = m_DrawImage.imageExtent.height;
 
 	// Tell gpu that 1 submit per frame is happening so it optimizes for that
 	VkCommandBufferBeginInfo currentCMDBeginInfo = VkInit::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 	VK_CHECK(vkBeginCommandBuffer(currentCMD, &currentCMDBeginInfo));
 
-	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	VkUtils::transitionImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	
-	VkClearColorValue clearValue;
-	float flash = std::abs(std::sin(m_FrameNumber / 120.f));
-	clearValue = { { 0.0f, 0.0f, flash, 1.0f } };
-	VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-	vkCmdClearColorImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+	DrawBackground(currentCMD);
 
-	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	VkUtils::transitionImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	VkUtils::copyImageToImage(currentCMD, m_DrawImage.image, m_SwapchainImages[swapchainImageIndex], m_DrawExtent, m_SwapchainExtent);
+	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	
 	VK_CHECK(vkEndCommandBuffer(currentCMD));
 
 	//prepare the submission to the queue. 
@@ -101,14 +113,14 @@ void VulkanEngine::DrawFrame()
 	//we will signal the _renderSemaphore, to signal that rendering has finished
 
 	VkCommandBufferSubmitInfo cmdinfo = VkInit::commandBufferSubmitInfo(currentCMD);
-	VkSemaphoreSubmitInfo waitInfo = VkInit::semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, GetCurrentFrame().SwapchainSemaphore);
-	VkSemaphoreSubmitInfo signalInfo = VkInit::semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, GetCurrentFrame().RenderSemaphore);
+	VkSemaphoreSubmitInfo waitInfo = VkInit::semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, GetCurrentFrame().swapchainSemaphore);
+	VkSemaphoreSubmitInfo signalInfo = VkInit::semaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, GetCurrentFrame().renderSemaphore);
 	
 	VkSubmitInfo2 submit = VkInit::submitInfo(&cmdinfo, &signalInfo, &waitInfo);
 
 	//submit command buffer to the queue and execute it.
 	// _renderFence will now block until the graphic commands finish execution
-	VK_CHECK(vkQueueSubmit2(m_GraphicsQueue, 1, &submit, GetCurrentFrame().RenderFence));
+	VK_CHECK(vkQueueSubmit2(m_GraphicsQueue, 1, &submit, GetCurrentFrame().renderFence));
 
 	//prepare present
 	// this will put the image we just rendered to into the visible window.
@@ -119,7 +131,7 @@ void VulkanEngine::DrawFrame()
 	presentInfo.pNext = nullptr;
 	presentInfo.pSwapchains = &m_Swapchain;
 	presentInfo.swapchainCount = 1;
-	presentInfo.pWaitSemaphores = &GetCurrentFrame().RenderSemaphore;
+	presentInfo.pWaitSemaphores = &GetCurrentFrame().renderSemaphore;
 	presentInfo.waitSemaphoreCount = 1;
 	presentInfo.pImageIndices = &swapchainImageIndex;
 
@@ -134,6 +146,7 @@ void VulkanEngine::MainLoop()
 	{
 		glfwPollEvents();
 
+		AddFPSToTitle();
 		DrawFrame();
 	}
 }
@@ -192,11 +205,56 @@ void VulkanEngine::InitVulkan()
 
 	m_GraphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
 	m_GraphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+
+	VmaAllocatorCreateInfo allocatorInfo = {};
+	allocatorInfo.physicalDevice = m_PhysicalDevice;
+	allocatorInfo.device = m_Device;
+	allocatorInfo.instance = m_Instance;
+	// To use GPU pointers
+	allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+	vmaCreateAllocator(&allocatorInfo, &m_Allocator);
+	m_DeletionQueue.pushFunction([&]()
+		{
+			vmaDestroyAllocator(m_Allocator);
+		});
 }
 
 void VulkanEngine::InitSwapchain()
 {
 	CreateSwapchain(m_WindowExtent.width, m_WindowExtent.height);
+
+	VkExtent3D drawImageExtent =
+	{
+		m_WindowExtent.width,
+		m_WindowExtent.height,
+		1
+	};
+
+	m_DrawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+	m_DrawImage.imageExtent = drawImageExtent;
+	
+	VkImageUsageFlags drawImageUsages{};
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	VkImageCreateInfo imageInfo = VkInit::imageCreateInfo(m_DrawImage.imageFormat, drawImageUsages, drawImageExtent);
+
+	// Allocate GPU memory
+	VmaAllocationCreateInfo imageAllocationInfo = {};
+	imageAllocationInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+	imageAllocationInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	vmaCreateImage(m_Allocator, &imageInfo, &imageAllocationInfo, &m_DrawImage.image, &m_DrawImage.allocation, nullptr);
+	VkImageViewCreateInfo imageviewInfo = VkInit::imageviewCreateInfo(m_DrawImage.imageFormat, m_DrawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VK_CHECK(vkCreateImageView(m_Device, &imageviewInfo, nullptr, &m_DrawImage.imageView));
+
+	m_DeletionQueue.pushFunction([&]()
+		{
+			vkDestroyImageView(m_Device, m_DrawImage.imageView, nullptr);
+			vmaDestroyImage(m_Allocator, m_DrawImage.image, m_DrawImage.allocation);
+		});
 }
 
 void VulkanEngine::InitCommands()
@@ -209,9 +267,9 @@ void VulkanEngine::InitCommands()
 
 	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		VK_CHECK(vkCreateCommandPool(m_Device, &commandPoolInfo, nullptr, &m_Frames[i].CommandPool));
-		VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBufferAllocateInfo(m_Frames[i].CommandPool, 1);
-		VK_CHECK(vkAllocateCommandBuffers(m_Device, &cmdAllocInfo, &m_Frames[i].CommandBuffer));
+		VK_CHECK(vkCreateCommandPool(m_Device, &commandPoolInfo, nullptr, &m_Frames[i].commandPool));
+		VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBufferAllocateInfo(m_Frames[i].commandPool, 1);
+		VK_CHECK(vkAllocateCommandBuffers(m_Device, &cmdAllocInfo, &m_Frames[i].commandBuffer));
 	}
 }
 
@@ -227,10 +285,10 @@ void VulkanEngine::InitSyncStructures()
 
 	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		VK_CHECK(vkCreateFence(m_Device, &fenceCreateInfo, nullptr, &m_Frames[i].RenderFence));
+		VK_CHECK(vkCreateFence(m_Device, &fenceCreateInfo, nullptr, &m_Frames[i].renderFence));
 
-		VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_Frames[i].SwapchainSemaphore));
-		VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_Frames[i].RenderSemaphore));
+		VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_Frames[i].swapchainSemaphore));
+		VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_Frames[i].renderSemaphore));
 	}
 }
 
@@ -261,5 +319,40 @@ void VulkanEngine::DestroySwapchain()
 	for (int i = 0; i < m_SwapchainImageViews.size(); i++)
 	{
 		vkDestroyImageView(m_Device, m_SwapchainImageViews[i], nullptr);
+	}
+}
+
+void VulkanEngine::DrawBackground(VkCommandBuffer& currentCMD)
+{
+	VkClearColorValue clearValue;
+	float flash = std::abs(std::sin(m_FrameNumber / 120.f));
+	float flash2 = std::abs(std::sin(m_FrameNumber / 120.f + 20.0));
+	float flash3 = std::abs(std::sin(m_FrameNumber / 120.f + 40.0));
+	clearValue = { { flash, flash2, flash3, 1.0f } };
+	VkImageSubresourceRange clearRange = VkInit::imageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+	vkCmdClearColorImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+}
+
+void VulkanEngine::AddFPSToTitle()
+{
+	static float lastTime = 0.0f;
+	static uint32_t nFrames = 0;
+
+	float currentTime = static_cast<float>(glfwGetTime());
+	m_DeltaTime = currentTime - lastTime;
+	nFrames++;
+
+	if (m_DeltaTime >= 1.0)
+	{
+		uint32_t fps = static_cast<uint32_t>(nFrames / m_DeltaTime);
+
+		float delay = static_cast<uint32_t>(100'000.0f / nFrames) / 100.0f;
+
+		std::stringstream ss;
+		ss << "Vulkan Engine" << "    [FPS: " << fps << "]     " << "[" << delay << " ms]";
+		glfwSetWindowTitle(m_Window, ss.str().c_str());
+
+		nFrames = 0;
+		lastTime = currentTime;
 	}
 }

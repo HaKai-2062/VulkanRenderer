@@ -15,4 +15,6 @@ namespace VkInit
 	VkSemaphoreSubmitInfo semaphoreSubmitInfo(VkPipelineStageFlags2 stageMask, VkSemaphore semaphore);
 	
 	VkImageSubresourceRange imageSubresourceRange(VkImageAspectFlags aspectMask);
+	VkImageCreateInfo imageCreateInfo(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent);
+	VkImageViewCreateInfo imageviewCreateInfo(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags);
 }
