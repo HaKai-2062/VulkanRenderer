@@ -77,8 +77,6 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES CONFIGURE_DEPENDS
 source_group("Shader Files" FILES ${GLSL_SOURCE_FILES})
 file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/imgui_impl_glfw.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/imgui_impl_vulkan.cpp"
 )
 source_group("Source Files" FILES ${MY_SOURCES})
 file(GLOB_RECURSE MY_HEADERS CONFIGURE_DEPENDS 
