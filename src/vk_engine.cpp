@@ -5,6 +5,9 @@
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 #include <VkBootstrap.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
 
 #include "vk_types.h"
 #include "vk_initializers.h"
@@ -33,6 +36,7 @@ void VulkanEngine::Init()
 	InitSyncStructures();
 	InitDescriptors();
 	InitPipelines();
+	InitImGui();
 
 	m_IsInitialized = true;
 }
@@ -97,8 +101,10 @@ void VulkanEngine::DrawFrame()
 	VkUtils::transitionImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	VkUtils::copyImageToImage(currentCMD, m_DrawImage.image, m_SwapchainImages[swapchainImageIndex], m_DrawExtent, m_SwapchainExtent);
-	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-	
+	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	DrawImgui(currentCMD, m_SwapchainImageViews[swapchainImageIndex]);
+	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
 	VK_CHECK(vkEndCommandBuffer(currentCMD));
 
 	//prepare the submission to the queue. 
@@ -114,6 +120,13 @@ void VulkanEngine::DrawFrame()
 	//submit command buffer to the queue and execute it.
 	// _renderFence will now block until the graphic commands finish execution
 	VK_CHECK(vkQueueSubmit2(m_GraphicsQueue, 1, &submit, GetCurrentFrame().renderFence));
+
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+	}
 
 	//prepare present
 	// this will put the image we just rendered to into the visible window.
@@ -133,11 +146,54 @@ void VulkanEngine::DrawFrame()
 	m_FrameNumber++;
 }
 
+void VulkanEngine::ImmediateSubmit(std::function<void(VkCommandBuffer currentCMD)>&& function)
+{
+	VK_CHECK(vkResetFences(m_Device, 1, &m_ImmediateFence));
+	VK_CHECK(vkResetCommandBuffer(m_ImmediateCommandBuffer, 0));
+
+	VkCommandBuffer cmd = m_ImmediateCommandBuffer;
+
+	VkCommandBufferBeginInfo cmdBeginInfo = VkInit::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+
+	function(cmd);
+
+	VK_CHECK(vkEndCommandBuffer(cmd));
+
+	VkCommandBufferSubmitInfo cmdinfo = VkInit::commandBufferSubmitInfo(cmd);
+	VkSubmitInfo2 submit = VkInit::submitInfo(&cmdinfo, nullptr, nullptr);
+
+	// submit command buffer to the queue and execute it.
+	//  _renderFence will now block until the graphic commands finish execution
+	VK_CHECK(vkQueueSubmit2(m_GraphicsQueue, 1, &submit, m_ImmediateFence));
+
+	VK_CHECK(vkWaitForFences(m_Device, 1, &m_ImmediateFence, true, 9999999999));
+}
+
 void VulkanEngine::MainLoop()
 {
 	while (!glfwWindowShouldClose(m_Window))
 	{
+		//if (glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+		//{
+		//	// Window is minimized, skip rendering
+		//	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		//	continue;
+		//}
+
 		glfwPollEvents();
+
+		// imgui new frame
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		//some imgui UI to test
+		ImGui::ShowDemoWindow();
+
+		//make imgui calculate internal draw structures
+		ImGui::Render();
 
 		AddFPSToTitle();
 		DrawFrame();
@@ -266,6 +322,17 @@ void VulkanEngine::InitCommands()
 		VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBufferAllocateInfo(m_Frames[i].commandPool, 1);
 		VK_CHECK(vkAllocateCommandBuffers(m_Device, &cmdAllocInfo, &m_Frames[i].commandBuffer));
 	}
+
+	VK_CHECK(vkCreateCommandPool(m_Device, &commandPoolInfo, nullptr, &m_ImmediateCommandPool));
+
+	// allocate the command buffer for immediate submits
+	VkCommandBufferAllocateInfo cmdAllocInfo = VkInit::commandBufferAllocateInfo(m_ImmediateCommandPool, 1);
+
+	VK_CHECK(vkAllocateCommandBuffers(m_Device, &cmdAllocInfo, &m_ImmediateCommandBuffer));
+
+	m_MainDeletionQueue.pushFunction([=]() {
+		vkDestroyCommandPool(m_Device, m_ImmediateCommandPool, nullptr);
+		});
 }
 
 void VulkanEngine::InitSyncStructures()
@@ -285,6 +352,9 @@ void VulkanEngine::InitSyncStructures()
 		VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_Frames[i].swapchainSemaphore));
 		VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_Frames[i].renderSemaphore));
 	}
+
+	VK_CHECK(vkCreateFence(m_Device, &fenceCreateInfo, nullptr, &m_ImmediateFence));
+	m_MainDeletionQueue.pushFunction([=]() { vkDestroyFence(m_Device, m_ImmediateFence, nullptr); });
 }
 
 void VulkanEngine::InitDescriptors()
@@ -427,6 +497,18 @@ void VulkanEngine::DrawBackground(VkCommandBuffer& currentCMD)
 	vkCmdDispatch(currentCMD, std::ceil(m_DrawExtent.width / 16.0), std::ceil(m_DrawExtent.height / 16.0), 1);
 }
 
+void VulkanEngine::DrawImgui(VkCommandBuffer currentCMD, VkImageView targetImageView)
+{
+	VkRenderingAttachmentInfo colorAttachment = VkInit::attachmentInfo(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkRenderingInfo renderInfo = VkInit::renderingInfo(m_SwapchainExtent, &colorAttachment, nullptr);
+
+	vkCmdBeginRendering(currentCMD, &renderInfo);
+
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), currentCMD);
+
+	vkCmdEndRendering(currentCMD);
+}
+
 void VulkanEngine::AddFPSToTitle()
 {
 	static float lastTime = 0.0f;
@@ -449,4 +531,73 @@ void VulkanEngine::AddFPSToTitle()
 		nFrames = 0;
 		lastTime = currentTime;
 	}
+}
+
+void VulkanEngine::InitImGui()
+{
+	// 1: create descriptor pool for IMGUI
+	//  the size of the pool is very oversize, but it's copied from imgui demo
+	//  itself.
+	VkDescriptorPoolSize pool_sizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+		{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
+
+	VkDescriptorPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	poolInfo.maxSets = 1000;
+	poolInfo.poolSizeCount = (uint32_t)std::size(pool_sizes);
+	poolInfo.pPoolSizes = pool_sizes;
+
+	VkDescriptorPool imguiPool;
+	VK_CHECK(vkCreateDescriptorPool(m_Device, &poolInfo, nullptr, &imguiPool));
+
+	// 2: initialize imgui library
+
+	// this initializes the core structures of imgui
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
+
+	// this initializes imgui for SDL
+	ImGui_ImplGlfw_InitForVulkan(m_Window, true);
+
+	// this initializes imgui for Vulkan
+	ImGui_ImplVulkan_InitInfo init_info = {};
+	init_info.Instance = m_Instance;
+	init_info.PhysicalDevice = m_PhysicalDevice;
+	init_info.Device = m_Device;
+	init_info.Queue = m_GraphicsQueue;
+	init_info.DescriptorPool = imguiPool;
+	init_info.MinImageCount = 3;
+	init_info.ImageCount = 3;
+	init_info.UseDynamicRendering = true;
+
+	//dynamic rendering parameters for imgui to use
+	init_info.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+	init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+	init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &m_SwapchainFormat;
+
+	init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+	ImGui_ImplVulkan_Init(&init_info);
+
+	ImGui_ImplVulkan_CreateFontsTexture();
+
+	// add the destroy the imgui created structures
+	m_MainDeletionQueue.pushFunction([=]() {
+		ImGui_ImplVulkan_Shutdown();
+		vkDestroyDescriptorPool(m_Device, imguiPool, nullptr);
+		});
 }

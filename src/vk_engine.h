@@ -39,6 +39,10 @@ public:
 	VkPipeline m_GradientPipeline;
 	VkPipelineLayout m_GradientPipelineLayout;
 
+	VkFence m_ImmediateFence;
+	VkCommandBuffer m_ImmediateCommandBuffer;
+	VkCommandPool m_ImmediateCommandPool;
+
 public:
 	
 	void Init();
@@ -46,6 +50,7 @@ public:
 	void DrawFrame();
 	void MainLoop();
 
+	void ImmediateSubmit(std::function<void(VkCommandBuffer currentCMD)>&& function);
 	FrameData& GetCurrentFrame() { return m_Frames[m_FrameNumber % 2]; };
 
 private:
@@ -61,6 +66,8 @@ private:
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
 	void DrawBackground(VkCommandBuffer& currentCMD);
+	void DrawImgui(VkCommandBuffer currentCMD, VkImageView targetImageView);
 
 	void AddFPSToTitle();
+	void InitImGui();
 };
