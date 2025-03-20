@@ -95,10 +95,12 @@ void VulkanEngine::DrawFrame()
 	VK_CHECK(vkBeginCommandBuffer(currentCMD, &currentCMDBeginInfo));
 
 	VkUtils::transitionImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-	
 	DrawBackground(currentCMD);
 
-	VkUtils::transitionImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	VkUtils::transitionImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	DrawGeometry(currentCMD);
+
+	VkUtils::transitionImage(currentCMD, m_DrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	VkUtils::copyImageToImage(currentCMD, m_DrawImage.image, m_SwapchainImages[swapchainImageIndex], m_DrawExtent, m_SwapchainExtent);
 	VkUtils::transitionImage(currentCMD, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -418,6 +420,7 @@ void VulkanEngine::InitDescriptors()
 void VulkanEngine::InitPipelines()
 {
 	InitBackgroundPipelines();
+	InitTrianglePipeline();
 }
 
 void VulkanEngine::InitBackgroundPipelines()
@@ -499,6 +502,46 @@ void VulkanEngine::InitBackgroundPipelines()
 		});
 }
 
+void VulkanEngine::InitTrianglePipeline()
+{
+	VkShaderModule triangleFragShader;
+	VkShaderModule triangleVertexShader;
+
+	if (!VkUtils::loadShaderModule(SHADER_PATH "colored_triangle.frag.spv", m_Device, &triangleFragShader))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when building colored_triangle frag shader\n");
+	}
+	if (!VkUtils::loadShaderModule(SHADER_PATH "colored_triangle.vert.spv", m_Device, &triangleVertexShader))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when building colored_triangle vert shader\n");
+	}
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = VkInit::pipelineLayoutCreateInfo();
+	VK_CHECK(vkCreatePipelineLayout(m_Device, &pipelineLayoutInfo, nullptr, &m_TrianglePipelineLayout));
+
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.m_PipelineLayout = m_TrianglePipelineLayout;
+	pipelineBuilder.SetShaders(triangleVertexShader, triangleFragShader);
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.SetMultiSamplingNone();
+	pipelineBuilder.DisableBlending();
+	pipelineBuilder.DisableDepthTest();
+
+	pipelineBuilder.SetColorAttachmentFormat(m_DrawImage.imageFormat);
+	pipelineBuilder.SetDepthFormat(VK_FORMAT_UNDEFINED);
+	m_TrianglePipeline = pipelineBuilder.BuildPipeline(m_Device);
+
+	vkDestroyShaderModule(m_Device, triangleFragShader, nullptr);
+	vkDestroyShaderModule(m_Device, triangleVertexShader, nullptr);
+
+	m_MainDeletionQueue.pushFunction([&]() {
+		vkDestroyPipelineLayout(m_Device, m_TrianglePipelineLayout, nullptr);
+		vkDestroyPipeline(m_Device, m_TrianglePipeline, nullptr);
+		});
+}
+
 void VulkanEngine::CreateSwapchain(uint32_t width, uint32_t height)
 {
 	vkb::SwapchainBuilder swapchainBuilder{ m_PhysicalDevice, m_Device, m_Surface };
@@ -550,6 +593,37 @@ void VulkanEngine::DrawBackground(VkCommandBuffer& currentCMD)
 	vkCmdPushConstants(currentCMD, m_GradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.data);
 	// execute the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
 	vkCmdDispatch(currentCMD, std::ceil(m_DrawExtent.width / 16.0f), std::ceil(m_DrawExtent.height / 16.0f), 1);
+}
+
+void VulkanEngine::DrawGeometry(VkCommandBuffer& currentCMD)
+{
+	VkRenderingAttachmentInfo colorAttachment = VkInit::attachmentInfo(m_DrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkRenderingInfo renderInfo = VkInit::renderingInfo(m_DrawExtent, &colorAttachment, nullptr);
+	vkCmdBeginRendering(currentCMD, &renderInfo);
+	vkCmdBindPipeline(currentCMD, VK_PIPELINE_BIND_POINT_GRAPHICS, m_TrianglePipeline);
+
+	VkViewport viewport = {};
+	viewport.x = 0;
+	viewport.y = 0;
+	viewport.width = m_DrawExtent.width;
+	viewport.height = m_DrawExtent.height;
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+
+	vkCmdSetViewport(currentCMD, 0, 1, &viewport);
+
+	VkRect2D scissor = {};
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	scissor.extent.width = m_DrawExtent.width;
+	scissor.extent.height = m_DrawExtent.height;
+
+	vkCmdSetScissor(currentCMD, 0, 1, &scissor);
+
+	// 3 vertices have to be drawns
+	vkCmdDraw(currentCMD, 3, 1, 0, 0);
+
+	vkCmdEndRendering(currentCMD);
 }
 
 void VulkanEngine::DrawImgui(VkCommandBuffer currentCMD, VkImageView targetImageView)

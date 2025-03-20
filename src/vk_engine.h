@@ -57,12 +57,14 @@ public:
 	VkExtent2D m_SwapchainExtent;
 	VkDescriptorSet m_DrawImageDescriptors;
 	VkDescriptorSetLayout m_DrawImageDescriptorLayout;
-	VkPipeline m_GradientPipeline;
-	VkPipelineLayout m_GradientPipelineLayout;
-
 	VkFence m_ImmediateFence;
 	VkCommandBuffer m_ImmediateCommandBuffer;
 	VkCommandPool m_ImmediateCommandPool;
+
+	VkPipeline m_GradientPipeline;
+	VkPipelineLayout m_GradientPipelineLayout;
+	VkPipeline m_TrianglePipeline;
+	VkPipelineLayout m_TrianglePipelineLayout;
 
 public:
 	
@@ -83,10 +85,12 @@ private:
 	void InitDescriptors();
 	void InitPipelines();
 	void InitBackgroundPipelines();
+	void InitTrianglePipeline();
 
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
 	void DrawBackground(VkCommandBuffer& currentCMD);
+	void DrawGeometry(VkCommandBuffer& currentCMD);
 	void DrawImgui(VkCommandBuffer currentCMD, VkImageView targetImageView);
 
 	void AddFPSToTitle();
