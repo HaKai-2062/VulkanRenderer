@@ -425,7 +425,7 @@ void VulkanEngine::InitPipelines()
 	InitBackgroundPipelines();
 
 	// Graphics
-	//InitTrianglePipeline();
+	InitTrianglePipeline();
 	InitMeshPipeline();
 }
 
@@ -557,7 +557,7 @@ void VulkanEngine::InitMeshPipeline()
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when building colored_triangle frag shader\n");
 	}
-	if (!VkUtils::loadShaderModule(SHADER_PATH "colored_triangle.vert.spv", m_Device, &triangleVertexShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "colored_triangle_mesh.vert.spv", m_Device, &triangleVertexShader))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when building colored_triangle vert shader\n");
 	}
@@ -679,7 +679,7 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 	vkCmdBeginRendering(cmd, &renderInfo);
 
 	// Needs Triangle pipeline to be initialized
-	//vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_TrianglePipeline);
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_TrianglePipeline);
 
 	VkViewport viewport = {};
 	viewport.x = 0;
@@ -701,7 +701,7 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 
 	// 3 vertices have to be drawns
 	// Needs Triangle pipeline to be initialized
-	//vkCmdDraw(cmd, 3, 1, 0, 0);
+	vkCmdDraw(cmd, 3, 1, 0, 0);
 
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
 
@@ -878,7 +878,7 @@ GPUMeshBuffers VulkanEngine::UploadMesh(std::span<uint32_t> indices, std::span<V
 
 		VkBufferCopy indexCopy{ 0 };
 		indexCopy.dstOffset = 0;
-		indexCopy.srcOffset = indexBufferSize;
+		indexCopy.srcOffset = vertexBufferSize;
 		indexCopy.size = indexBufferSize;
 
 		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
