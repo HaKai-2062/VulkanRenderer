@@ -425,7 +425,7 @@ void VulkanEngine::InitPipelines()
 	InitBackgroundPipelines();
 
 	// Graphics
-	InitTrianglePipeline();
+	//InitTrianglePipeline();
 	InitMeshPipeline();
 }
 
@@ -677,7 +677,9 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 	VkRenderingAttachmentInfo colorAttachment = VkInit::attachmentInfo(m_DrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	VkRenderingInfo renderInfo = VkInit::renderingInfo(m_DrawExtent, &colorAttachment, nullptr);
 	vkCmdBeginRendering(cmd, &renderInfo);
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_TrianglePipeline);
+
+	// Needs Triangle pipeline to be initialized
+	//vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_TrianglePipeline);
 
 	VkViewport viewport = {};
 	viewport.x = 0;
@@ -698,7 +700,8 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 	vkCmdSetScissor(cmd, 0, 1, &scissor);
 
 	// 3 vertices have to be drawns
-	vkCmdDraw(cmd, 3, 1, 0, 0);
+	// Needs Triangle pipeline to be initialized
+	//vkCmdDraw(cmd, 3, 1, 0, 0);
 
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
 
