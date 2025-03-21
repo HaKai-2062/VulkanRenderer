@@ -42,6 +42,7 @@ public:
 	VmaAllocator m_Allocator;
 	AllocatedImage m_DrawImage;
 	DescriptorAllocator m_GlobalDescriptorAllocator;
+	GPUMeshBuffers m_Rectangle;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -65,6 +66,8 @@ public:
 	VkPipelineLayout m_GradientPipelineLayout;
 	VkPipeline m_TrianglePipeline;
 	VkPipelineLayout m_TrianglePipelineLayout;
+	VkPipeline m_MeshPipeline;
+	VkPipelineLayout m_MeshPipelineLayout;
 
 public:
 	
@@ -73,7 +76,7 @@ public:
 	void DrawFrame();
 	void MainLoop();
 
-	void ImmediateSubmit(std::function<void(VkCommandBuffer currentCMD)>&& function);
+	void ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 	FrameData& GetCurrentFrame() { return m_Frames[m_FrameNumber % 2]; };
 
 private:
@@ -83,16 +86,21 @@ private:
 	void InitCommands();
 	void InitSyncStructures();
 	void InitDescriptors();
+	void InitImGui();
 	void InitPipelines();
 	void InitBackgroundPipelines();
 	void InitTrianglePipeline();
-
-	void CreateSwapchain(uint32_t width, uint32_t height);
-	void DestroySwapchain();
-	void DrawBackground(VkCommandBuffer& currentCMD);
-	void DrawGeometry(VkCommandBuffer& currentCMD);
-	void DrawImgui(VkCommandBuffer currentCMD, VkImageView targetImageView);
+	void InitMeshPipeline();
+	void InitDefaultData();
 
 	void AddFPSToTitle();
-	void InitImGui();
+	void CreateSwapchain(uint32_t width, uint32_t height);
+	void DestroySwapchain();
+	void DrawBackground(VkCommandBuffer& cmd);
+	void DrawGeometry(VkCommandBuffer& cmd);
+	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
+	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+	void DestroyBuffer(const AllocatedBuffer& buffer);
+	GPUMeshBuffers UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
+
 };
