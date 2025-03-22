@@ -3,6 +3,10 @@
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/transform.hpp>
+
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 #include <VkBootstrap.h>
@@ -59,6 +63,12 @@ void VulkanEngine::Cleanup()
 			m_Frames[i].deletionQueue.flush();
 		}
 
+		for (auto& mesh : testMeshes)
+		{
+			DestroyBuffer(mesh->meshBuffers.indexBuffer);
+			DestroyBuffer(mesh->meshBuffers.vertexBuffer);
+		}
+
 		// Flush global deletion queue
 		m_MainDeletionQueue.flush();
 
@@ -100,6 +110,7 @@ void VulkanEngine::DrawFrame()
 	DrawBackground(cmd);
 
 	VkUtils::transitionImage(cmd, m_DrawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkUtils::transitionImage(cmd, m_DepthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 	DrawGeometry(cmd);
 
 	VkUtils::transitionImage(cmd, m_DrawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -318,10 +329,24 @@ void VulkanEngine::InitSwapchain()
 	VkImageViewCreateInfo imageviewInfo = VkInit::imageviewCreateInfo(m_DrawImage.imageFormat, m_DrawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VK_CHECK(vkCreateImageView(m_Device, &imageviewInfo, nullptr, &m_DrawImage.imageView));
 
+	// Add depth buffer
+	m_DepthImage.imageFormat = VK_FORMAT_D32_SFLOAT;
+	m_DepthImage.imageExtent = drawImageExtent;
+	VkImageUsageFlags depthImageUsages{};
+	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+	VkImageCreateInfo depthImageInfo = VkInit::imageCreateInfo(m_DepthImage.imageFormat, depthImageUsages, drawImageExtent);
+	vmaCreateImage(m_Allocator, &depthImageInfo, &imageAllocationInfo, &m_DepthImage.image, &m_DepthImage.allocation, nullptr);
+	VkImageViewCreateInfo depthImageViewInfo = VkInit::imageviewCreateInfo(m_DepthImage.imageFormat, m_DepthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
+	VK_CHECK(vkCreateImageView(m_Device, &depthImageViewInfo, nullptr, &m_DepthImage.imageView));
+
 	m_MainDeletionQueue.pushFunction([&]()
 		{
 			vkDestroyImageView(m_Device, m_DrawImage.imageView, nullptr);
 			vmaDestroyImage(m_Allocator, m_DrawImage.image, m_DrawImage.allocation);
+
+			vkDestroyImageView(m_Device, m_DepthImage.imageView, nullptr);
+			vmaDestroyImage(m_Allocator, m_DepthImage.image, m_DepthImage.allocation);
 		});
 }
 
@@ -536,7 +561,7 @@ void VulkanEngine::InitTrianglePipeline()
 	pipelineBuilder.DisableDepthTest();
 
 	pipelineBuilder.SetColorAttachmentFormat(m_DrawImage.imageFormat);
-	pipelineBuilder.SetDepthFormat(VK_FORMAT_UNDEFINED);
+	pipelineBuilder.SetDepthFormat(m_DepthImage.imageFormat);
 	m_TrianglePipeline = pipelineBuilder.BuildPipeline(m_Device);
 
 	vkDestroyShaderModule(m_Device, triangleFragShader, nullptr);
@@ -581,10 +606,11 @@ void VulkanEngine::InitMeshPipeline()
 	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 	pipelineBuilder.SetMultiSamplingNone();
 	pipelineBuilder.DisableBlending();
-	pipelineBuilder.DisableDepthTest();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	//pipelineBuilder.DisableDepthTest();
 
 	pipelineBuilder.SetColorAttachmentFormat(m_DrawImage.imageFormat);
-	pipelineBuilder.SetDepthFormat(VK_FORMAT_UNDEFINED);
+	pipelineBuilder.SetDepthFormat(m_DepthImage.imageFormat);
 	m_MeshPipeline = pipelineBuilder.BuildPipeline(m_Device);
 
 	vkDestroyShaderModule(m_Device, triangleFragShader, nullptr);
@@ -617,6 +643,8 @@ void VulkanEngine::InitDefaultData()
 		DestroyBuffer(m_Rectangle.indexBuffer);
 		DestroyBuffer(m_Rectangle.vertexBuffer);
 		});
+
+	testMeshes = loadGltfMeshes(this, ASSET_PATH "basicmesh.glb").value();
 }
 
 void VulkanEngine::CreateSwapchain(uint32_t width, uint32_t height)
@@ -675,8 +703,11 @@ void VulkanEngine::DrawBackground(VkCommandBuffer& cmd)
 void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 {
 	VkRenderingAttachmentInfo colorAttachment = VkInit::attachmentInfo(m_DrawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	VkRenderingInfo renderInfo = VkInit::renderingInfo(m_DrawExtent, &colorAttachment, nullptr);
+	VkRenderingAttachmentInfo depthAttachment = VkInit::depthAttachmentInfo(m_DepthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	VkRenderingInfo renderInfo = VkInit::renderingInfo(m_DrawExtent, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(cmd, &renderInfo);
+
+	////////////////////////////////////////////////////////////////////////
 
 	// Needs Triangle pipeline to be initialized
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_TrianglePipeline);
@@ -703,9 +734,11 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 	// Needs Triangle pipeline to be initialized
 	vkCmdDraw(cmd, 3, 1, 0, 0);
 
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
+	////////////////////////////////////////////////////////////////////////
 
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
 	GPUDrawPushConstants pushConstants;
+	
 	pushConstants.worldMatrix = glm::mat4(1.0f);
 	pushConstants.vertexBufferAddress = m_Rectangle.vertexDeviceAddress;
 
@@ -713,6 +746,19 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 	vkCmdBindIndexBuffer(cmd, m_Rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
 	vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+
+	////////////////////////////////////////////////////////////////////////
+	glm::mat4 view = glm::translate(glm::vec3{ 0,0,-5 });
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)m_DrawExtent.width / (float)m_DrawExtent.height, 10000.f, 0.1f);
+	projection[1][1] *= -1;
+
+	pushConstants.worldMatrix = projection * view;
+	pushConstants.vertexBufferAddress = testMeshes[2]->meshBuffers.vertexDeviceAddress;
+
+	vkCmdPushConstants(cmd, m_MeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+	vkCmdBindIndexBuffer(cmd, testMeshes[2]->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+	vkCmdDrawIndexed(cmd, testMeshes[2]->surfaces[0].count, 1, testMeshes[2]->surfaces[0].startIndex, 0, 0);
 
 	vkCmdEndRendering(cmd);
 }

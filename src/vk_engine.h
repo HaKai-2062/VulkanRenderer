@@ -5,6 +5,7 @@
 
 #include "vk_types.h"
 #include "vk_descriptors.h"
+#include "vk_loader.h"
 
 struct ComputePushConstants
 {
@@ -41,8 +42,10 @@ public:
 	DeletionQueue m_MainDeletionQueue;
 	VmaAllocator m_Allocator;
 	AllocatedImage m_DrawImage;
+	AllocatedImage m_DepthImage;
 	DescriptorAllocator m_GlobalDescriptorAllocator;
 	GPUMeshBuffers m_Rectangle;
+	std::vector<std::shared_ptr<MeshAsset>> testMeshes;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -76,8 +79,9 @@ public:
 	void DrawFrame();
 	void MainLoop();
 
-	void ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 	FrameData& GetCurrentFrame() { return m_Frames[m_FrameNumber % 2]; };
+	void ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
+	GPUMeshBuffers UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
 private:
 
@@ -101,6 +105,4 @@ private:
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 	void DestroyBuffer(const AllocatedBuffer& buffer);
-	GPUMeshBuffers UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
-
 };

@@ -106,6 +106,7 @@ find_program(GLSL_VALIDATOR glslangValidator REQUIRED HINTS /usr/bin /usr/local/
 target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC 
 GLFW_INCLUDE_NONE=1
 SHADER_PATH="${CMAKE_SOURCE_DIR}/shaders/"
+ASSET_PATH="${CMAKE_SOURCE_DIR}/assets/"
 )
 
 target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC 

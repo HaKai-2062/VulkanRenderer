@@ -152,8 +152,7 @@ VkImageViewCreateInfo VkInit::imageviewCreateInfo(VkFormat format, VkImage image
     return info;
 }
 
-VkRenderingAttachmentInfo VkInit::attachmentInfo(
-    VkImageView view, VkClearValue* clear, VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/)
+VkRenderingAttachmentInfo VkInit::attachmentInfo(VkImageView view, VkClearValue* clear, VkImageLayout layout)
 {
     VkRenderingAttachmentInfo colorAttachment{};
     colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -169,6 +168,21 @@ VkRenderingAttachmentInfo VkInit::attachmentInfo(
     }
 
     return colorAttachment;
+}
+
+VkRenderingAttachmentInfo VkInit::depthAttachmentInfo(VkImageView view, VkImageLayout layout)
+{
+    VkRenderingAttachmentInfo depthAttachment{};
+    depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depthAttachment.pNext = nullptr;
+
+    depthAttachment.imageView = view;
+    depthAttachment.imageLayout = layout;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.clearValue.depthStencil.depth = 0.f;
+
+    return depthAttachment;
 }
 
 VkRenderingInfo VkInit::renderingInfo(VkExtent2D renderExtent, VkRenderingAttachmentInfo* colorAttachment,
