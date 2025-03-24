@@ -45,7 +45,7 @@ public:
 	AllocatedImage m_DepthImage;
 	DescriptorAllocator m_GlobalDescriptorAllocator;
 	GPUMeshBuffers m_Rectangle;
-	std::vector<std::shared_ptr<MeshAsset>> testMeshes;
+	std::vector<std::shared_ptr<MeshAsset>> m_TestMeshes;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;

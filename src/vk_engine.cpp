@@ -4,6 +4,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
 
@@ -63,7 +64,7 @@ void VulkanEngine::Cleanup()
 			m_Frames[i].deletionQueue.flush();
 		}
 
-		for (auto& mesh : testMeshes)
+		for (auto& mesh : m_TestMeshes)
 		{
 			DestroyBuffer(mesh->meshBuffers.indexBuffer);
 			DestroyBuffer(mesh->meshBuffers.vertexBuffer);
@@ -644,7 +645,7 @@ void VulkanEngine::InitDefaultData()
 		DestroyBuffer(m_Rectangle.vertexBuffer);
 		});
 
-	testMeshes = loadGltfMeshes(this, ASSET_PATH "basicmesh.glb").value();
+	m_TestMeshes = loadGltfMeshes(this, ASSET_PATH "basicmesh.glb").value();
 }
 
 void VulkanEngine::CreateSwapchain(uint32_t width, uint32_t height)
@@ -748,17 +749,18 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 	vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
 
 	////////////////////////////////////////////////////////////////////////
-	glm::mat4 view = glm::translate(glm::vec3{ 0,0,-5 });
-	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)m_DrawExtent.width / (float)m_DrawExtent.height, 10000.f, 0.1f);
+
+	glm::mat4 view = glm::translate(glm::vec3{ 0, 0, -5 });
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)m_DrawExtent.width / (float)m_DrawExtent.height, 10000.0f, 0.1f);
 	projection[1][1] *= -1;
 
 	pushConstants.worldMatrix = projection * view;
-	pushConstants.vertexBufferAddress = testMeshes[2]->meshBuffers.vertexDeviceAddress;
+	pushConstants.vertexBufferAddress = m_TestMeshes[2]->meshBuffers.vertexDeviceAddress;
 
 	vkCmdPushConstants(cmd, m_MeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-	vkCmdBindIndexBuffer(cmd, testMeshes[2]->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(cmd, m_TestMeshes[2]->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-	vkCmdDrawIndexed(cmd, testMeshes[2]->surfaces[0].count, 1, testMeshes[2]->surfaces[0].startIndex, 0, 0);
+	vkCmdDrawIndexed(cmd, m_TestMeshes[2]->surfaces[0].count, 1, m_TestMeshes[2]->surfaces[0].startIndex, 0, 0);
 
 	vkCmdEndRendering(cmd);
 }

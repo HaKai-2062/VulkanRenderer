@@ -7,7 +7,6 @@
 #include <glm/gtx/quaternion.hpp>
 #include <fastgltf/core.hpp>
 #include <fastgltf/glm_element_traits.hpp>
-//#include <fastgltf/parser.hpp>
 #include <fastgltf/tools.hpp>
 
 #include "vk_loader.h"
@@ -20,8 +19,10 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngi
 	fmt::print(fmt::fg(fmt::color::white), " | ");
 
 	auto data = fastgltf::GltfDataBuffer::FromPath(filePath);
-	
-	constexpr auto gltfOptions = fastgltf::Options::LoadGLBBuffers | fastgltf::Options::LoadExternalBuffers;
+
+	constexpr auto gltfOptions = fastgltf::Options::LoadGLBBuffers
+		| fastgltf::Options::LoadExternalBuffers;
+
 	fastgltf::Asset gltf;
 	fastgltf::Parser parser{};
 
@@ -131,7 +132,7 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngi
 		}
 
 		newMesh.meshBuffers = engine->UploadMesh(indices, vertices);
-		meshes.push_back(std::make_shared<MeshAsset>(std::move(newMesh)));
+		meshes.emplace_back(std::make_shared<MeshAsset>(std::move(newMesh)));
 	}
 
 	return meshes;
