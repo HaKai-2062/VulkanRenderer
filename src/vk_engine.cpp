@@ -1,5 +1,6 @@
 #include <sstream>
 #include <array>
+#include <chrono>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -95,13 +96,18 @@ void VulkanEngine::DrawFrame()
 	VK_CHECK(vkResetFences(m_Device, 1, &GetCurrentFrame().renderFence));
 
 	uint32_t swapchainImageIndex;
-	VK_CHECK(vkAcquireNextImageKHR(m_Device, m_Swapchain, 1000000000, GetCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex));
+	VkResult result = vkAcquireNextImageKHR(m_Device, m_Swapchain, 1000000000, GetCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		m_ResizeRequested = true;
+		return;
+	}
 
 	VkCommandBuffer cmd = GetCurrentFrame().commandBuffer;
 	VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-	m_DrawExtent.width = m_DrawImage.imageExtent.width;
-	m_DrawExtent.height = m_DrawImage.imageExtent.height;
+	m_DrawExtent.width = std::min(m_SwapchainExtent.width, m_DrawImage.imageExtent.width) * m_RenderScale;
+	m_DrawExtent.height = std::min(m_SwapchainExtent.height, m_DrawImage.imageExtent.height) * m_RenderScale;
 
 	// Tell gpu that 1 submit per frame is happening so it optimizes for that
 	VkCommandBufferBeginInfo cmdBeginInfo = VkInit::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -157,7 +163,11 @@ void VulkanEngine::DrawFrame()
 	presentInfo.waitSemaphoreCount = 1;
 	presentInfo.pImageIndices = &swapchainImageIndex;
 
-	VK_CHECK(vkQueuePresentKHR(m_GraphicsQueue, &presentInfo));
+	result = vkQueuePresentKHR(m_GraphicsQueue, &presentInfo);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		m_ResizeRequested = true;
+	}
 
 	m_FrameNumber++;
 }
@@ -191,14 +201,19 @@ void VulkanEngine::MainLoop()
 {
 	while (!glfwWindowShouldClose(m_Window))
 	{
-		//if (glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
-		//{
-		//	// Window is minimized, skip rendering
-		//	std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		//	continue;
-		//}
-
 		glfwPollEvents();
+
+		if (glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+		{
+			// Window is minimized, skip rendering
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			continue;
+		}
+
+		if (m_ResizeRequested)
+		{
+			ResizeSwapchain();
+		}
 
 		// imgui new frame
 		ImGui_ImplVulkan_NewFrame();
@@ -210,6 +225,8 @@ void VulkanEngine::MainLoop()
 
 		if (ImGui::Begin("background"))
 		{
+			ImGui::SliderFloat("Render Scale", &m_RenderScale, 0.3f, 1.f);
+
 			ComputeEffect& selected = m_BGEffects[m_CurrentBGEffect];
 
 			ImGui::Text("Selected effect: ", selected.name);
@@ -606,7 +623,8 @@ void VulkanEngine::InitMeshPipeline()
 	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
 	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 	pipelineBuilder.SetMultiSamplingNone();
-	pipelineBuilder.DisableBlending();
+	//pipelineBuilder.DisableBlending();
+	pipelineBuilder.EnableBlendingAdditive();
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 	//pipelineBuilder.DisableDepthTest();
 
@@ -676,6 +694,20 @@ void VulkanEngine::DestroySwapchain()
 	{
 		vkDestroyImageView(m_Device, m_SwapchainImageViews[i], nullptr);
 	}
+}
+
+void VulkanEngine::ResizeSwapchain()
+{
+	vkDeviceWaitIdle(m_Device);
+	DestroySwapchain();
+
+	int w, h;
+	glfwGetWindowSize(m_Window, &w, &h);
+	m_WindowExtent.width = w;
+	m_WindowExtent.height = h;
+
+	CreateSwapchain(m_WindowExtent.width, m_WindowExtent.height);
+	m_ResizeRequested = false;
 }
 
 void VulkanEngine::DrawBackground(VkCommandBuffer& cmd)

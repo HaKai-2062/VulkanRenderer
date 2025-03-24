@@ -27,6 +27,8 @@ public:
 	void SetCullMode(VkCullModeFlags cullMode, VkFrontFace frontFace);
 	void SetMultiSamplingNone();
 	void DisableBlending();
+	void EnableBlendingAdditive();
+	void EnableBlendingAlphaBlend();
 	void SetColorAttachmentFormat(VkFormat format);
 	void SetDepthFormat(VkFormat format);
 	void EnableDepthtest(bool depthWriteEnable, VkCompareOp op);

@@ -30,14 +30,16 @@ class VulkanEngine
 public:
 
 	bool m_IsInitialized{ false };
+	bool m_ResizeRequested{ false };
 	int m_FrameNumber{ 0 };
 	float m_DeltaTime{ 0 };
-	VkExtent2D m_WindowExtent{ 1700 , 900 };
+	VkExtent2D m_WindowExtent{ 1920 , 1080 };
 	struct GLFWwindow* m_Window{ nullptr };
 	std::vector<ComputeEffect> m_BGEffects;
 	int m_CurrentBGEffect{ 0 };
 
 	VkExtent2D m_DrawExtent;
+	float m_RenderScale = 1.0f;
 	FrameData m_Frames[MAX_FRAMES_IN_FLIGHT];
 	DeletionQueue m_MainDeletionQueue;
 	VmaAllocator m_Allocator;
@@ -100,6 +102,7 @@ private:
 	void AddFPSToTitle();
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
+	void ResizeSwapchain();
 	void DrawBackground(VkCommandBuffer& cmd);
 	void DrawGeometry(VkCommandBuffer& cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
