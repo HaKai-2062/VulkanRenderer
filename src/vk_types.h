@@ -9,6 +9,7 @@
 
 #include <deque>
 #include <functional>
+#include <span>
 
 #include <glm/glm.hpp>
 
@@ -48,17 +49,6 @@ struct DeletionQueue
 	}
 };
 
-struct FrameData
-{
-	VkCommandPool commandPool;
-	VkCommandBuffer commandBuffer;
-	// Wait till we get ImageFromSwapchain, Wait till gpu has rendered to present on the screen
-	VkSemaphore swapchainSemaphore, renderSemaphore;
-	// Wait till gpu has rendered to prevent overwriting gpu commands
-	VkFence renderFence;
-	DeletionQueue deletionQueue;
-};
-
 struct AllocatedImage
 {
 	VkImage image;
@@ -95,4 +85,14 @@ struct GPUDrawPushConstants
 {
 	glm::mat4 worldMatrix;
 	VkDeviceAddress vertexBufferAddress;
+};
+
+struct GPUSceneData
+{
+	glm::mat4 view;
+	glm::mat4 proj;
+	glm::mat4 viewproj;
+	glm::vec4 ambientColor;
+	glm::vec4 sunlightDirection; // w for sun power
+	glm::vec4 sunlightColor;
 };

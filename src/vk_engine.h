@@ -28,7 +28,6 @@ struct ComputeEffect
 class VulkanEngine
 {
 public:
-
 	bool m_IsInitialized{ false };
 	bool m_ResizeRequested{ false };
 	int m_FrameNumber{ 0 };
@@ -45,9 +44,10 @@ public:
 	VmaAllocator m_Allocator;
 	AllocatedImage m_DrawImage;
 	AllocatedImage m_DepthImage;
-	DescriptorAllocator m_GlobalDescriptorAllocator;
+	DescriptorAllocatorDynamic m_GlobalDescriptorAllocator;
 	GPUMeshBuffers m_Rectangle;
 	std::vector<std::shared_ptr<MeshAsset>> m_TestMeshes;
+	GPUSceneData m_SceneData;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -63,6 +63,7 @@ public:
 	VkExtent2D m_SwapchainExtent;
 	VkDescriptorSet m_DrawImageDescriptors;
 	VkDescriptorSetLayout m_DrawImageDescriptorLayout;
+	VkDescriptorSetLayout m_GPUSceneDataDescriptorLayout;
 	VkFence m_ImmediateFence;
 	VkCommandBuffer m_ImmediateCommandBuffer;
 	VkCommandPool m_ImmediateCommandPool;
@@ -75,7 +76,6 @@ public:
 	VkPipelineLayout m_MeshPipelineLayout;
 
 public:
-	
 	void Init();
 	void Cleanup();
 	void DrawFrame();
@@ -86,7 +86,6 @@ public:
 	GPUMeshBuffers UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
 private:
-
 	void InitVulkan();
 	void InitSwapchain();
 	void InitCommands();

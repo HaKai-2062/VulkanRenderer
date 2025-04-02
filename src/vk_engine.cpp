@@ -93,6 +93,7 @@ void VulkanEngine::DrawFrame()
 	// Wait until the gpu has finished rendering the last frame. Timeout of 1e9 ns
 	VK_CHECK(vkWaitForFences(m_Device, 1, &GetCurrentFrame().renderFence, true, 1000000000));
 	GetCurrentFrame().deletionQueue.flush();
+	GetCurrentFrame().frameDescriptors.ClearPools(m_Device);
 	VK_CHECK(vkResetFences(m_Device, 1, &GetCurrentFrame().renderFence));
 
 	uint32_t swapchainImageIndex;
@@ -420,12 +421,12 @@ void VulkanEngine::InitSyncStructures()
 void VulkanEngine::InitDescriptors()
 {
 	//create a descriptor pool that will hold 10 sets with 1 image each
-	std::vector<DescriptorAllocator::PoolSizeRatio> sizes =
+	std::vector<DescriptorAllocatorDynamic::PoolSizeRatio> sizes =
 	{
 		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 }
 	};
 
-	m_GlobalDescriptorAllocator.initPool(m_Device, 10, sizes);
+	m_GlobalDescriptorAllocator.Init(m_Device, 10, sizes);
 
 	//make the descriptor set layout for our compute draw
 	{
@@ -435,31 +436,42 @@ void VulkanEngine::InitDescriptors()
 	}
 
 	//allocate a descriptor set for our draw image
-	m_DrawImageDescriptors = m_GlobalDescriptorAllocator.allocate(m_Device, m_DrawImageDescriptorLayout);
+	m_DrawImageDescriptors = m_GlobalDescriptorAllocator.Allocate(m_Device, m_DrawImageDescriptorLayout);
 
-	VkDescriptorImageInfo imgInfo{};
-	imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-	imgInfo.imageView = m_DrawImage.imageView;
-
-	VkWriteDescriptorSet drawImageWrite = {};
-	drawImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	drawImageWrite.pNext = nullptr;
-
-	drawImageWrite.dstBinding = 0;
-	drawImageWrite.dstSet = m_DrawImageDescriptors;
-	drawImageWrite.descriptorCount = 1;
-	drawImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	drawImageWrite.pImageInfo = &imgInfo;
-
-	vkUpdateDescriptorSets(m_Device, 1, &drawImageWrite, 0, nullptr);
+	DescriptorWriter writer;
+	writer.writeImage(0, m_DrawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	writer.updateSet(m_Device, m_DrawImageDescriptors);
 
 	//make sure both the descriptor allocator and the new layout get cleaned up properly
-	m_MainDeletionQueue.pushFunction([&]()
-		{
-		m_GlobalDescriptorAllocator.destroyPool(m_Device);
-
+	m_MainDeletionQueue.pushFunction([&]() {
+		m_GlobalDescriptorAllocator.DestroyPools(m_Device);
 		vkDestroyDescriptorSetLayout(m_Device, m_DrawImageDescriptorLayout, nullptr);
+		vkDestroyDescriptorSetLayout(m_Device, m_GPUSceneDataDescriptorLayout, nullptr);
+	});
+
+	// Send scene data to GPU
+	{
+		DescriptorLayoutBuilder builder;
+		builder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		m_GPUSceneDataDescriptorLayout = builder.build(m_Device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	}
+
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		std::vector<DescriptorAllocatorDynamic::PoolSizeRatio> frameSizes = {
+			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
+		};
+
+		m_Frames[i].frameDescriptors = DescriptorAllocatorDynamic{};
+		m_Frames[i].frameDescriptors.Init(m_Device, 1000, frameSizes);
+
+		m_MainDeletionQueue.pushFunction([&, i]() {
+			m_Frames[i].frameDescriptors.DestroyPools(m_Device);
 		});
+	}
 }
 
 void VulkanEngine::InitPipelines()
@@ -793,6 +805,24 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 	vkCmdBindIndexBuffer(cmd, m_TestMeshes[2]->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
 	vkCmdDrawIndexed(cmd, m_TestMeshes[2]->surfaces[0].count, 1, m_TestMeshes[2]->surfaces[0].startIndex, 0, 0);
+
+	////////////////////////////////////////////////////////////////////////
+
+	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	GetCurrentFrame().deletionQueue.pushFunction([=, this]() {
+		DestroyBuffer(gpuSceneDataBuffer);
+	});
+
+	GPUSceneData* sceneUniformData = (GPUSceneData*)gpuSceneDataBuffer.allocation->GetMappedData();
+	*sceneUniformData = m_SceneData;
+
+	VkDescriptorSet globalDescriptor = GetCurrentFrame().frameDescriptors.Allocate(m_Device, m_GPUSceneDataDescriptorLayout);
+
+	DescriptorWriter writer;
+	writer.writeBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	writer.updateSet(m_Device, globalDescriptor);
+
+	////////////////////////////////////////////////////////////////////////
 
 	vkCmdEndRendering(cmd);
 }

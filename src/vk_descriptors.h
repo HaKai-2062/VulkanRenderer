@@ -1,7 +1,5 @@
 #pragma once
 
-#include <span>
-
 #include "vk_types.h"
 
 struct DescriptorLayoutBuilder
@@ -13,18 +11,50 @@ struct DescriptorLayoutBuilder
     VkDescriptorSetLayout build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
 };
 
-struct DescriptorAllocator
+class DescriptorAllocatorDynamic
 {
-    struct PoolSizeRatio
-    {
-        VkDescriptorType type;
-        float ratio;
-    };
+public:
+	struct PoolSizeRatio
+	{
+		VkDescriptorType type;
+		float ratio;
+	};
 
-    VkDescriptorPool pool;
+	void Init(VkDevice device, uint32_t initialSets, std::span<PoolSizeRatio> poolRatios);
+	void ClearPools(VkDevice device);
+	void DestroyPools(VkDevice device);
+	VkDescriptorSet Allocate(VkDevice device, VkDescriptorSetLayout layout, void* pNext = nullptr);
 
-    void initPool(VkDevice device, uint32_t maxSets, std::span<PoolSizeRatio> poolRatios);
-    void clearDescriptors(VkDevice device);
-    void destroyPool(VkDevice device);
-    VkDescriptorSet allocate(VkDevice device, VkDescriptorSetLayout layout);
+private:
+	VkDescriptorPool GetPool(VkDevice device);
+	VkDescriptorPool CreatePool(VkDevice device, uint32_t setCount, std::span<PoolSizeRatio> poolRatios);
+
+	std::vector<PoolSizeRatio> m_Ratios;
+	std::vector<VkDescriptorPool> m_FullPools;
+	std::vector<VkDescriptorPool> m_ReadyPools;
+	uint32_t m_SetsPerPool;
+};
+
+struct DescriptorWriter
+{
+    std::deque<VkDescriptorImageInfo> imageInfos;
+    std::deque<VkDescriptorBufferInfo> bufferInfos;
+    std::vector<VkWriteDescriptorSet> writes;
+
+    void writeImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
+    void writeBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
+    void clear();
+    void updateSet(VkDevice device, VkDescriptorSet set);
+};
+
+struct FrameData
+{
+	VkCommandPool commandPool;
+	VkCommandBuffer commandBuffer;
+	// Wait till we get ImageFromSwapchain, Wait till gpu has rendered to present on the screen
+	VkSemaphore swapchainSemaphore, renderSemaphore;
+	// Wait till gpu has rendered to prevent overwriting gpu commands
+	VkFence renderFence;
+	DeletionQueue deletionQueue;
+	DescriptorAllocatorDynamic frameDescriptors;
 };
