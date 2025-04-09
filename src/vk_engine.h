@@ -48,6 +48,13 @@ public:
 	GPUMeshBuffers m_Rectangle;
 	std::vector<std::shared_ptr<MeshAsset>> m_TestMeshes;
 	GPUSceneData m_SceneData;
+	AllocatedImage m_WhiteImage;
+	AllocatedImage m_BlackImage;
+	AllocatedImage m_GreyImage;
+	AllocatedImage m_ErrorCheckerboardImage;
+	VkSampler m_DefaultSamplerLinear;
+	VkSampler m_DefaultSamplerNearest;
+	VkDescriptorSetLayout m_SingleImageDescriptorLayout;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -107,4 +114,7 @@ private:
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 	void DestroyBuffer(const AllocatedBuffer& buffer);
+	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	void DestroyImage(const AllocatedImage& image);
 };
