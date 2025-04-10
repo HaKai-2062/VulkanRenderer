@@ -4,7 +4,6 @@
 #include <glm/glm.hpp>
 
 #include "vk_types.h"
-#include "vk_descriptors.h"
 #include "vk_loader.h"
 
 struct ComputePushConstants
@@ -55,6 +54,8 @@ public:
 	VkSampler m_DefaultSamplerLinear;
 	VkSampler m_DefaultSamplerNearest;
 	VkDescriptorSetLayout m_SingleImageDescriptorLayout;
+	MaterialInstance m_DefaultData;
+	GLTFMetallic_Roughness m_MetalRoughMaterial;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
