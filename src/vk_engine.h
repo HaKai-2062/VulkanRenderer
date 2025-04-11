@@ -8,25 +8,31 @@
 
 struct ComputePushConstants
 {
-	glm::vec4 data1;
-	glm::vec4 data2;
-	glm::vec4 data3;
-	glm::vec4 data4;
+	glm::vec4 Data1;
+	glm::vec4 Data2;
+	glm::vec4 Data3;
+	glm::vec4 Data4;
 };
 
 struct ComputeEffect
 {
-	const char* name;
+	const char* Name;
 
-	VkPipeline pipeline;
-	VkPipelineLayout layout;
+	VkPipeline Pipeline;
+	VkPipelineLayout Layout;
 
-	ComputePushConstants data;
+	ComputePushConstants Data;
 };
 
 class VulkanEngine
 {
 public:
+	VkDevice Device;
+	AllocatedImage DrawImage;
+	AllocatedImage DepthImage;
+	VkDescriptorSetLayout GPUSceneDataDescriptorLayout;
+
+private:
 	bool m_IsInitialized{ false };
 	bool m_ResizeRequested{ false };
 	int m_FrameNumber{ 0 };
@@ -41,8 +47,7 @@ public:
 	FrameData m_Frames[MAX_FRAMES_IN_FLIGHT];
 	DeletionQueue m_MainDeletionQueue;
 	VmaAllocator m_Allocator;
-	AllocatedImage m_DrawImage;
-	AllocatedImage m_DepthImage;
+
 	DescriptorAllocatorDynamic m_GlobalDescriptorAllocator;
 	GPUMeshBuffers m_Rectangle;
 	std::vector<std::shared_ptr<MeshAsset>> m_TestMeshes;
@@ -62,16 +67,14 @@ public:
 	VkInstance m_Instance;
 	VkDebugUtilsMessengerEXT m_DebugMessenger;
 	VkPhysicalDevice m_PhysicalDevice;
-	VkDevice m_Device;
 	VkSurfaceKHR m_Surface;
 	VkSwapchainKHR m_Swapchain;
 	VkFormat m_SwapchainFormat;
 	std::vector<VkImage> m_SwapchainImages;
 	std::vector<VkImageView> m_SwapchainImageViews;
 	VkExtent2D m_SwapchainExtent;
-	VkDescriptorSet m_DrawImageDescriptors;
-	VkDescriptorSetLayout m_DrawImageDescriptorLayout;
-	VkDescriptorSetLayout m_GPUSceneDataDescriptorLayout;
+	VkDescriptorSet DrawImageDescriptors;
+	VkDescriptorSetLayout DrawImageDescriptorLayout;
 	VkFence m_ImmediateFence;
 	VkCommandBuffer m_ImmediateCommandBuffer;
 	VkCommandPool m_ImmediateCommandPool;

@@ -1,23 +1,23 @@
 #include "vk_types.h"
 
-void DescriptorLayoutBuilder::addBinding(uint32_t binding, VkDescriptorType type)
+void DescriptorLayoutBuilder::AddBinding(uint32_t binding, VkDescriptorType type)
 {
     VkDescriptorSetLayoutBinding newbind{};
     newbind.binding = binding;
     newbind.descriptorCount = 1;
     newbind.descriptorType = type;
 
-    bindings.push_back(newbind);
+    Bindings.push_back(newbind);
 }
 
-void DescriptorLayoutBuilder::clear()
+void DescriptorLayoutBuilder::Clear()
 {
-    bindings.clear();
+    Bindings.clear();
 }
 
-VkDescriptorSetLayout DescriptorLayoutBuilder::build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext, VkDescriptorSetLayoutCreateFlags flags)
+VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext, VkDescriptorSetLayoutCreateFlags flags)
 {
-    for (auto& b : bindings)
+    for (auto& b : Bindings)
     {
         b.stageFlags |= shaderStages;
     }
@@ -25,8 +25,8 @@ VkDescriptorSetLayout DescriptorLayoutBuilder::build(VkDevice device, VkShaderSt
     VkDescriptorSetLayoutCreateInfo info = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
     info.pNext = pNext;
 
-    info.pBindings = bindings.data();
-    info.bindingCount = (uint32_t)bindings.size();
+    info.pBindings = Bindings.data();
+    info.bindingCount = (uint32_t)Bindings.size();
     info.flags = flags;
 
     VkDescriptorSetLayout set;
@@ -138,8 +138,8 @@ VkDescriptorPool DescriptorAllocatorDynamic::CreatePool(VkDevice device, uint32_
     for (PoolSizeRatio ratio : poolRatios)
     {
         poolSizes.push_back(VkDescriptorPoolSize{
-            .type = ratio.type,
-            .descriptorCount = uint32_t(ratio.ratio * setCount)
+            .type = ratio.Type,
+            .descriptorCount = uint32_t(ratio.Ratio * setCount)
         });
     }
 
@@ -155,9 +155,9 @@ VkDescriptorPool DescriptorAllocatorDynamic::CreatePool(VkDevice device, uint32_
     return newPool;
 }
 
-void DescriptorWriter::writeImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type)
+void DescriptorWriter::WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type)
 {
-    VkDescriptorImageInfo& info = imageInfos.emplace_back(VkDescriptorImageInfo{
+    VkDescriptorImageInfo& info = ImageInfos.emplace_back(VkDescriptorImageInfo{
     .sampler = sampler,
     .imageView = image,
     .imageLayout = layout
@@ -171,12 +171,12 @@ void DescriptorWriter::writeImage(int binding, VkImageView image, VkSampler samp
     write.descriptorType = type;
     write.pImageInfo = &info;
 
-    writes.push_back(write);
+    Writes.push_back(write);
 }
 
-void DescriptorWriter::writeBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type)
+void DescriptorWriter::WriteBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type)
 {
-    VkDescriptorBufferInfo& info = bufferInfos.emplace_back(VkDescriptorBufferInfo{
+    VkDescriptorBufferInfo& info = BufferInfos.emplace_back(VkDescriptorBufferInfo{
         .buffer = buffer,
         .offset = offset,
         .range = size
@@ -190,22 +190,22 @@ void DescriptorWriter::writeBuffer(int binding, VkBuffer buffer, size_t size, si
     write.descriptorType = type;
     write.pBufferInfo = &info;
 
-    writes.push_back(write);
+    Writes.push_back(write);
 }
 
-void DescriptorWriter::clear()
+void DescriptorWriter::Clear()
 {
-    imageInfos.clear();
-    writes.clear();
-    bufferInfos.clear();
+    ImageInfos.clear();
+    Writes.clear();
+    BufferInfos.clear();
 }
 
-void DescriptorWriter::updateSet(VkDevice device, VkDescriptorSet set)
+void DescriptorWriter::UpdateSet(VkDevice device, VkDescriptorSet set)
 {
-    for (VkWriteDescriptorSet& write : writes)
+    for (VkWriteDescriptorSet& write : Writes)
     {
         write.dstSet = set;
     }
 
-    vkUpdateDescriptorSets(device, (uint32_t)writes.size(), writes.data(), 0, nullptr);
+    vkUpdateDescriptorSets(device, (uint32_t)Writes.size(), Writes.data(), 0, nullptr);
 }

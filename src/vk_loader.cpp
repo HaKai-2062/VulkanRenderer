@@ -12,7 +12,7 @@
 #include "vk_loader.h"
 #include "vk_engine.h"
 
-std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngine* engine, std::filesystem::path filePath)
+std::optional<std::vector<std::shared_ptr<MeshAsset>>> LoadGltfMeshes(VulkanEngine* engine, std::filesystem::path filePath)
 {
 	fmt::print(fmt::fg(fmt::color::white), "Loading GLTF: ");
 	fmt::print(fmt::fg(fmt::color::yellow), "{}", filePath.string());
@@ -50,13 +50,13 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngi
 		vertices.clear();
 		
 		MeshAsset newMesh;
-		newMesh.name = mesh.name;
+		newMesh.Name = mesh.name;
 
 		for (auto&& p : mesh.primitives)
 		{
 			GeoSurface newSurface;
-			newSurface.startIndex = (uint32_t)indices.size();
-			newSurface.count = (uint32_t)gltf.accessors[p.indicesAccessor.value()].count;
+			newSurface.StartIndex = (uint32_t)indices.size();
+			newSurface.Count = (uint32_t)gltf.accessors[p.indicesAccessor.value()].count;
 			size_t initialVtx = vertices.size();
 
 			// Load indices
@@ -78,11 +78,11 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngi
 				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltf, posAccessor,
 					[&](glm::vec3 v, size_t index) {
 						Vertex newVtx;
-						newVtx.position = v;
-						newVtx.normal = { 1.0f, 0.0f, 0.0f };
-						newVtx.color = glm::vec4(1.0f);
-						newVtx.uvX = 0.0f;
-						newVtx.uvY = 0.0f;
+						newVtx.Position = v;
+						newVtx.Normal = { 1.0f, 0.0f, 0.0f };
+						newVtx.Color = glm::vec4(1.0f);
+						newVtx.UVX = 0.0f;
+						newVtx.UVY = 0.0f;
 						vertices[initialVtx + index] = newVtx;
 					});
 			}
@@ -93,7 +93,7 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngi
 			{
 				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltf, gltf.accessors[(*normals).accessorIndex],
 					[&](glm::vec3 v, size_t index) {
-						vertices[initialVtx + index].normal = v;
+						vertices[initialVtx + index].Normal = v;
 					});
 			}
 
@@ -103,8 +103,8 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngi
 			{
 				fastgltf::iterateAccessorWithIndex<glm::vec2>(gltf, gltf.accessors[(*uvs).accessorIndex],
 					[&](glm::vec2 v, size_t index) {
-						vertices[initialVtx + index].uvX = v.x;
-						vertices[initialVtx + index].uvY = v.y;
+						vertices[initialVtx + index].UVX = v.x;
+						vertices[initialVtx + index].UVY = v.y;
 					});
 			}
 
@@ -114,11 +114,11 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngi
 			{
 				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltf, gltf.accessors[(*colors).accessorIndex],
 					[&](glm::vec4 v, size_t index) {
-						vertices[initialVtx + index].color = v;
+						vertices[initialVtx + index].Color = v;
 					});
 			}
 
-			newMesh.surfaces.push_back(newSurface);
+			newMesh.Surfaces.push_back(newSurface);
 		}
 
 		// Display vertex normals
@@ -127,11 +127,11 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngi
 		{
 			for (Vertex& vertex : vertices)
 			{
-				vertex.color = glm::vec4(vertex.normal, 1.0f);
+				vertex.Color = glm::vec4(vertex.Normal, 1.0f);
 			}
 		}
 
-		newMesh.meshBuffers = engine->UploadMesh(indices, vertices);
+		newMesh.MeshBuffers = engine->UploadMesh(indices, vertices);
 		meshes.emplace_back(std::make_shared<MeshAsset>(std::move(newMesh)));
 	}
 

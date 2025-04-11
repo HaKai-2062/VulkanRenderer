@@ -30,32 +30,32 @@ constexpr unsigned int MAX_FRAMES_IN_FLIGHT = 2;
 
 struct DeletionQueue
 {
-	std::deque<std::function<void()>> deletors;
+	std::deque<std::function<void()>> Deletors;
 
-	void pushFunction(std::function<void()>&& function)
+	void PushFunction(std::function<void()>&& function)
 	{
-		deletors.push_back(function);
+		Deletors.push_back(function);
 	}
 
-	void flush()
+	void Flush()
 	{
 		// reverse iterate the deletion queue to execute all the functions
-		for (auto it = deletors.rbegin(); it != deletors.rend(); it++)
+		for (auto it = Deletors.rbegin(); it != Deletors.rend(); it++)
 		{
 			(*it)(); //call functors
 		}
 
-		deletors.clear();
+		Deletors.clear();
 	}
 };
 
 struct DescriptorLayoutBuilder
 {
-	std::vector<VkDescriptorSetLayoutBinding> bindings;
+	std::vector<VkDescriptorSetLayoutBinding> Bindings;
 
-	void addBinding(uint32_t binding, VkDescriptorType type);
-	void clear();
-	VkDescriptorSetLayout build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
+	void AddBinding(uint32_t binding, VkDescriptorType type);
+	void Clear();
+	VkDescriptorSetLayout Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
 };
 
 class DescriptorAllocatorDynamic
@@ -63,8 +63,8 @@ class DescriptorAllocatorDynamic
 public:
 	struct PoolSizeRatio
 	{
-		VkDescriptorType type;
-		float ratio;
+		VkDescriptorType Type;
+		float Ratio;
 	};
 
 	void Init(VkDevice device, uint32_t initialSets, std::span<PoolSizeRatio> poolRatios);
@@ -84,75 +84,74 @@ private:
 
 struct DescriptorWriter
 {
-	std::deque<VkDescriptorImageInfo> imageInfos;
-	std::deque<VkDescriptorBufferInfo> bufferInfos;
-	std::vector<VkWriteDescriptorSet> writes;
+	std::deque<VkDescriptorImageInfo> ImageInfos;
+	std::deque<VkDescriptorBufferInfo> BufferInfos;
+	std::vector<VkWriteDescriptorSet> Writes;
 
-	void writeImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
-	void writeBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
-	void clear();
-	void updateSet(VkDevice device, VkDescriptorSet set);
+	void WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
+	void WriteBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
+	void Clear();
+	void UpdateSet(VkDevice device, VkDescriptorSet set);
 };
 
 struct FrameData
 {
-	VkCommandPool commandPool;
-	VkCommandBuffer commandBuffer;
+	VkCommandPool CommandPool;
+	VkCommandBuffer CommandBuffer;
 	// Wait till we get ImageFromSwapchain, Wait till gpu has rendered to present on the screen
-	VkSemaphore swapchainSemaphore, renderSemaphore;
+	VkSemaphore SwapchainSemaphore, RenderSemaphore;
 	// Wait till gpu has rendered to prevent overwriting gpu commands
-	VkFence renderFence;
-	DeletionQueue deletionQueue;
-	DescriptorAllocatorDynamic frameDescriptors;
+	VkFence RenderFence;
+	DeletionQueue DeletionQueue;
+	DescriptorAllocatorDynamic FrameDescriptors;
 };
-
 
 struct AllocatedImage
 {
-	VkImage image;
-	VkImageView imageView;
-	VmaAllocation allocation;
-	VkExtent3D imageExtent;
-	VkFormat imageFormat;
+	VkImage Image;
+	VkImageView ImageView;
+	VmaAllocation Allocation;
+	VkExtent3D ImageExtent;
+	VkFormat ImageFormat;
 };
 
 struct AllocatedBuffer
 {
-	VkBuffer buffer;
-	VmaAllocation allocation;
-	VmaAllocationInfo info;
+	VkBuffer Buffer;
+	VmaAllocation Allocation;
+	VmaAllocationInfo Info;
 };
 
 struct Vertex
 {
-	glm::vec3 position;
-	float uvX;
-	glm::vec3 normal;
-	float uvY;
-	glm::vec4 color;
+	glm::vec3 Position;
+	float UVX;
+	glm::vec3 Normal;
+	float UVY;
+	glm::vec4 Color;
 };
 
 struct GPUMeshBuffers
 {
-	AllocatedBuffer indexBuffer;
-	AllocatedBuffer vertexBuffer;
-	VkDeviceAddress vertexDeviceAddress;
+	AllocatedBuffer IndexBuffer;
+	AllocatedBuffer VertexBuffer;
+	VkDeviceAddress VertexDeviceAddress;
 };
 
 struct GPUDrawPushConstants
 {
-	glm::mat4 worldMatrix;
-	VkDeviceAddress vertexBufferAddress;
+	glm::mat4 WorldMatrix;
+	VkDeviceAddress VertexBufferAddress;
 };
 
 struct GPUSceneData
 {
-	glm::mat4 view;
-	glm::mat4 proj;
-	glm::mat4 viewproj;
-	glm::vec4 ambientColor;
-	glm::vec4 sunlightDirection; // w for sun power
-	glm::vec4 sunlightColor;
+	glm::mat4 View;
+	glm::mat4 Proj;
+	glm::mat4 ViewProj;
+	glm::vec4 AmbientColor;
+	glm::vec4 SunlightDirection; // w for sun power
+	glm::vec4 SunlightColor;
 };
 
 enum class MaterialPass : uint8_t
@@ -164,47 +163,47 @@ enum class MaterialPass : uint8_t
 
 struct MaterialPipeline
 {
-	VkPipeline pipeline;
-	VkPipelineLayout layout;
+	VkPipeline Pipeline;
+	VkPipelineLayout Layout;
 };
 
 struct MaterialInstance
 {
-	MaterialPipeline* pipeline;
-	VkDescriptorSet materialSet;
-	MaterialPass passType;
+	MaterialPipeline* Pipeline;
+	VkDescriptorSet MaterialSet;
+	MaterialPass PassType;
 };
 
 struct GLTFMetallic_Roughness
 {
-	MaterialPipeline opaquePipeline;
-	MaterialPipeline transparentPipeline;
+	MaterialPipeline OpaquePipeline;
+	MaterialPipeline TransparentPipeline;
 
-	VkDescriptorSetLayout materialLayout;
+	VkDescriptorSetLayout MaterialLayout;
 
 	// 256 bytes in total because good default allignment
 	struct MaterialConstants
 	{
-		glm::vec4 colorFactors;
-		glm::vec4 metalRoughFactors;
+		glm::vec4 ColorFactors;
+		glm::vec4 MetalRoughFactors;
 		// padding, may need for uniform buffer
-		glm::vec4 extra[14];
+		glm::vec4 Extra[14];
 	};
 
 
 	struct MaterialResources
 	{
-		AllocatedImage colorImage;
-		VkSampler colorSampler;
-		AllocatedImage metalRoughImage;
-		VkSampler	metalRoughSampler;
-		VkBuffer dataBuffer;
-		uint32_t dataBufferOffset;
+		AllocatedImage ColorImage;
+		VkSampler ColorSampler;
+		AllocatedImage MetalRoughImage;
+		VkSampler	MetalRoughSampler;
+		VkBuffer DataBuffer;
+		uint32_t DataBufferOffset;
 	};
 
-	DescriptorWriter writer;
+	DescriptorWriter Writer;
 
-	void buildPipelines(class VulkanEngine* engine);
-	void clearResources(VkDevice device);
-	MaterialInstance writeMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocatorDynamic& descriptorAllocator);
+	void BuildPipelines(class VulkanEngine* engine);
+	void ClearResources(VkDevice device);
+	MaterialInstance WriteMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocatorDynamic& descriptorAllocator);
 };

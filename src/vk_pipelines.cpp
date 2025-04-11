@@ -9,7 +9,7 @@ void PipelineBuilder::Clear()
     m_Rasterizer = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
     m_ColorBlendAttachment = {};
     m_Multisampling = { .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-    m_PipelineLayout = {};
+    PipelineLayout = {};
     m_DepthStencil = { .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
     m_RenderInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
 
@@ -48,7 +48,7 @@ VkPipeline PipelineBuilder::BuildPipeline(VkDevice device)
     pipelineInfo.pMultisampleState = &m_Multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDepthStencilState = &m_DepthStencil;
-    pipelineInfo.layout = m_PipelineLayout;
+    pipelineInfo.layout = PipelineLayout;
 
     VkDynamicState state[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
     VkPipelineDynamicStateCreateInfo dynamicInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };

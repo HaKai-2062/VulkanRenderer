@@ -7,17 +7,17 @@
 
 struct GeoSurface
 {
-	uint32_t startIndex;
-	uint32_t count;
+	uint32_t StartIndex;
+	uint32_t Count;
 };
 
 struct MeshAsset
 {
-	std::string name;
-	std::vector<GeoSurface> surfaces;
-	GPUMeshBuffers meshBuffers;
+	std::string Name;
+	std::vector<GeoSurface> Surfaces;
+	GPUMeshBuffers MeshBuffers;
 };
 
 class VulkanEngine;
 
-std::optional<std::vector<std::shared_ptr<MeshAsset>>> loadGltfMeshes(VulkanEngine* engine, std::filesystem::path filePath);
+std::optional<std::vector<std::shared_ptr<MeshAsset>>> LoadGltfMeshes(VulkanEngine* engine, std::filesystem::path filePath);

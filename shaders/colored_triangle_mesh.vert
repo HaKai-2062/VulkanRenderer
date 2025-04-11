@@ -6,28 +6,28 @@ layout (location = 1) out vec2 v_UV;
 
 struct Vertex
 {
-	vec3 position;
-	float uvX;
-	vec3 normal;
-	float uvY;
-	vec4 color;
+	vec3 Position;
+	float UVX;
+	vec3 Normal;
+	float UVY;
+	vec4 Color;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer
 {
-	Vertex vertices[];
+	Vertex Vertices[];
 };
 
 layout (push_constant) uniform constants
 {
-	mat4 renderMatrix;
-	VertexBuffer vertexBuffer;
+	mat4 RenderMatrix;
+	VertexBuffer VertexBuffer;
 } PushConstants;
 
 void main()
 {
-	Vertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
-	gl_Position = PushConstants.renderMatrix * vec4(v.position, 1.0f);
-	v_Color = v.color.xyz;
-	v_UV = vec2(v.uvX, v.uvY);
+	Vertex v = PushConstants.VertexBuffer.Vertices[gl_VertexIndex];
+	gl_Position = PushConstants.RenderMatrix * vec4(v.Position, 1.0f);
+	v_Color = v.Color.xyz;
+	v_UV = vec2(v.UVX, v.UVY);
 }
