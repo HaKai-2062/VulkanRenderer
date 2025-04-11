@@ -122,7 +122,7 @@ std::optional<std::vector<std::shared_ptr<MeshAsset>>> LoadGltfMeshes(VulkanEngi
 		}
 
 		// Display vertex normals
-		constexpr bool overrideColors = true;
+		constexpr bool overrideColors = false;
 		if (overrideColors)
 		{
 			for (Vertex& vertex : vertices)

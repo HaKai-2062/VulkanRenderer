@@ -7,6 +7,8 @@
 #include <fmt/os.h>
 #include <fmt/color.h>
 
+#include <vector>
+#include <memory>
 #include <deque>
 #include <functional>
 #include <span>
@@ -206,4 +208,37 @@ struct GLTFMetallic_Roughness
 	void BuildPipelines(class VulkanEngine* engine);
 	void ClearResources(VkDevice device);
 	MaterialInstance WriteMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocatorDynamic& descriptorAllocator);
+};
+
+struct DrawContext;
+
+class IRenderable
+{
+	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
+};
+
+struct Node : public IRenderable
+{
+	void RefreshTransform(const glm::mat4& parentMatrix)
+	{
+		WorldTransform = parentMatrix * LocalTransform;
+		for (auto& c : Children)
+		{
+			c->RefreshTransform(WorldTransform);
+		}
+	}
+
+	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx)
+	{
+		for (auto& c : Children)
+		{
+			c->Draw(topMatrix, ctx);
+		}
+	}
+
+	std::weak_ptr<Node> Parent;
+	std::vector<std::shared_ptr<Node>> Children;
+
+	glm::mat4 LocalTransform;
+	glm::mat4 WorldTransform;
 };

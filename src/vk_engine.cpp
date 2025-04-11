@@ -141,6 +141,8 @@ void VulkanEngine::MainLoop()
 
 void VulkanEngine::DrawFrame()
 {
+	UpdateScene();
+
 	// Wait until the gpu has finished rendering the last frame. Timeout of 1e9 ns
 	VK_CHECK(vkWaitForFences(Device, 1, &GetCurrentFrame().RenderFence, true, 1000000000));
 	GetCurrentFrame().DeletionQueue.Flush();
@@ -795,6 +797,22 @@ void VulkanEngine::InitDefaultData()
 	materialResources.DataBufferOffset = 0;
 
 	m_DefaultData = m_MetalRoughMaterial.WriteMaterial(Device, MaterialPass::MainColor, materialResources, m_GlobalDescriptorAllocator);
+
+	for (auto& mesh : m_TestMeshes)
+	{
+		std::shared_ptr<MeshNode> newNode = std::make_shared<MeshNode>();
+		newNode->Mesh = mesh;
+
+		newNode->LocalTransform = glm::mat4(1.0f);
+		newNode->WorldTransform = glm::mat4(1.0f);
+
+		for (auto& surface : newNode->Mesh->Surfaces)
+		{
+			surface.Material = std::make_shared<GLTFMaterial>(m_DefaultData);
+		}
+
+		m_LoadedNodes[mesh->Name] = std::move(newNode);
+	}
 }
 
 void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
@@ -1007,44 +1025,6 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 
 	////////////////////////////////////////////////////////////////////////
 
-	//vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
-	//GPUDrawPushConstants pushConstants;
-
-	//pushConstants.worldMatrix = glm::mat4(1.0f);
-	//pushConstants.vertexBufferAddress = m_Rectangle.vertexDeviceAddress;
-
-	//vkCmdPushConstants(cmd, m_MeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-	//vkCmdBindIndexBuffer(cmd, m_Rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-	//vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
-
-	////////////////////////////////////////////////////////////////////////
-
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
-
-	//bind a texture
-	VkDescriptorSet imageSet = GetCurrentFrame().FrameDescriptors.Allocate(Device, m_SingleImageDescriptorLayout);
-	{
-		DescriptorWriter writer;
-		writer.WriteImage(0, m_ErrorCheckerboardImage.ImageView, m_DefaultSamplerNearest, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-		writer.UpdateSet(Device, imageSet);
-	}
-	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipelineLayout, 0, 1, &imageSet, 0, nullptr);
-	
-	GPUDrawPushConstants pushConstants;
-	glm::mat4 view = glm::translate(glm::vec3{ 0, 0, -5 });
-	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)m_DrawExtent.width / (float)m_DrawExtent.height, 10000.0f, 0.1f);
-	projection[1][1] *= -1;
-	pushConstants.WorldMatrix = projection * view;
-	pushConstants.VertexBufferAddress = m_TestMeshes[2]->MeshBuffers.VertexDeviceAddress;
-
-	vkCmdPushConstants(cmd, m_MeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-	vkCmdBindIndexBuffer(cmd, m_TestMeshes[2]->MeshBuffers.IndexBuffer.Buffer, 0, VK_INDEX_TYPE_UINT32);
-
-	vkCmdDrawIndexed(cmd, m_TestMeshes[2]->Surfaces[0].Count, 1, m_TestMeshes[2]->Surfaces[0].StartIndex, 0, 0);
-
-	////////////////////////////////////////////////////////////////////////
-
 	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	GetCurrentFrame().DeletionQueue.PushFunction([=, this]() {
 		DestroyBuffer(gpuSceneDataBuffer);
@@ -1059,8 +1039,22 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 	writer.WriteBuffer(0, gpuSceneDataBuffer.Buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	writer.UpdateSet(Device, globalDescriptor);
 
-	////////////////////////////////////////////////////////////////////////
+	for (const RenderObject& draw : m_MainDrawContext.OpaqueSurfaces)
+	{
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.Material->Pipeline->Pipeline);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.Material->Pipeline->Layout, 0, 1, &globalDescriptor, 0, nullptr);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.Material->Pipeline->Layout, 1, 1, &draw.Material->MaterialSet, 0, nullptr);
+	
+		vkCmdBindIndexBuffer(cmd, draw.IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
+		GPUDrawPushConstants pushConstants;
+		pushConstants.VertexBufferAddress = draw.VertexBufferAddress;
+		pushConstants.WorldMatrix = draw.Transform;
+		vkCmdPushConstants(cmd, draw.Material->Pipeline->Layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+		vkCmdDrawIndexed(cmd, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
+	}
+
+	////////////////////////////////////////////////////////////////////////
 	vkCmdEndRendering(cmd);
 }
 
@@ -1263,4 +1257,51 @@ void VulkanEngine::DestroyImage(const AllocatedImage& image)
 {
 	vkDestroyImageView(Device, image.ImageView, nullptr);
 	vmaDestroyImage(m_Allocator, image.Image, image.Allocation);
+}
+
+void VulkanEngine::UpdateScene()
+{
+	m_MainDrawContext.OpaqueSurfaces.clear();
+	m_LoadedNodes["Suzanne"]->Draw(glm::mat4(1.0f), m_MainDrawContext);
+
+	m_SceneData.View = glm::translate(glm::vec3{ 0.0f, 0.0f, -5.0f });
+	m_SceneData.Proj = glm::perspective(glm::radians(70.f), (float)m_WindowExtent.width / (float)m_WindowExtent.height, 10000.f, 0.1f);
+	m_SceneData.Proj[1][1] *= -1;
+	m_SceneData.ViewProj = m_SceneData.Proj * m_SceneData.View;
+
+	// Default lighting parameters
+	m_SceneData.AmbientColor = glm::vec4(0.1f);
+	m_SceneData.SunlightColor = glm::vec4(1.0f);
+	m_SceneData.SunlightDirection = glm::vec4(0.0f, 1.0f, 0.5f, 1.0f);
+
+	for (int x = -3; x < 3; x++)
+	{
+
+		glm::mat4 scale = glm::scale(glm::vec3{ 0.2f });
+		glm::mat4 translation = glm::translate(glm::vec3{ x, 1.0f, 0.0f });
+
+		m_LoadedNodes["Cube"]->Draw(translation * scale, m_MainDrawContext);
+	}
+}
+
+void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx)
+{
+	glm::mat4 nodeMatrix = topMatrix * WorldTransform;
+
+	for (auto& surface : Mesh->Surfaces)
+	{
+		RenderObject obj;
+		obj.IndexCount = surface.Count;
+		obj.FirstIndex = surface.StartIndex;
+		obj.IndexBuffer = Mesh->MeshBuffers.IndexBuffer.Buffer;
+		obj.Material = &surface.Material->Data;
+
+		obj.Transform = nodeMatrix;
+		obj.VertexBufferAddress = Mesh->MeshBuffers.VertexDeviceAddress;
+
+		ctx.OpaqueSurfaces.push_back(obj);
+	}
+
+	// Recurse down
+	Node::Draw(topMatrix, ctx);
 }

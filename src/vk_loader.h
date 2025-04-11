@@ -5,10 +5,18 @@
 
 #include "vk_types.h"
 
+class VulkanEngine;
+
+struct GLTFMaterial
+{
+	MaterialInstance Data;
+};
+
 struct GeoSurface
 {
 	uint32_t StartIndex;
 	uint32_t Count;
+	std::shared_ptr<GLTFMaterial> Material;
 };
 
 struct MeshAsset
@@ -17,7 +25,5 @@ struct MeshAsset
 	std::vector<GeoSurface> Surfaces;
 	GPUMeshBuffers MeshBuffers;
 };
-
-class VulkanEngine;
 
 std::optional<std::vector<std::shared_ptr<MeshAsset>>> LoadGltfMeshes(VulkanEngine* engine, std::filesystem::path filePath);

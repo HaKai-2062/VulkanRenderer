@@ -24,6 +24,30 @@ struct ComputeEffect
 	ComputePushConstants Data;
 };
 
+struct MeshNode : public Node
+{
+	std::shared_ptr<MeshAsset> Mesh;
+
+	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) override;
+};
+
+struct RenderObject
+{
+	uint32_t IndexCount;
+	uint32_t FirstIndex;
+	VkBuffer IndexBuffer;
+
+	MaterialInstance* Material;
+
+	glm::mat4 Transform;
+	VkDeviceAddress VertexBufferAddress;
+};
+
+struct DrawContext
+{
+	std::vector<RenderObject> OpaqueSurfaces;
+};
+
 class VulkanEngine
 {
 public:
@@ -61,6 +85,8 @@ private:
 	VkDescriptorSetLayout m_SingleImageDescriptorLayout;
 	MaterialInstance m_DefaultData;
 	GLTFMetallic_Roughness m_MetalRoughMaterial;
+	DrawContext m_MainDrawContext;
+	std::unordered_map<std::string, std::shared_ptr<Node>> m_LoadedNodes;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -121,4 +147,5 @@ private:
 	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	void DestroyImage(const AllocatedImage& image);
+	void UpdateScene();
 };
