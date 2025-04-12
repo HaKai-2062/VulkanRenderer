@@ -29,9 +29,6 @@ static const bool bUseValidationLayers = true;
 #endif
 
 static VkExtent2D ScreenSize{ 1920, 1080 };
-glm::vec2 LastMousePos{ ScreenSize.width / 2.0f, ScreenSize.height / 2.0f };
-bool FirstMouse = true;
-Camera VulkanEngine::m_Camera;
 
 void VulkanEngine::Init()
 {
@@ -51,8 +48,6 @@ void VulkanEngine::Init()
 	InitPipelines();
 	InitImGui();
 	InitDefaultData();
-
-	glfwSetCursorPosCallback(m_Window, VulkanEngine::ProcessMouseEvents);
 
 	m_IsInitialized = true;
 }
@@ -111,7 +106,10 @@ void VulkanEngine::MainLoop()
 			continue;
 		}
 
+		double xPos, yPos;
+		glfwGetCursorPos(m_Window, &xPos, &yPos);
 		m_Camera.ProcessKeyEvents(m_Window, m_DeltaTime);
+		m_Camera.ProcessMouseEvents(m_Window, xPos, yPos);
 
 		if (m_ResizeRequested)
 		{
@@ -1319,23 +1317,4 @@ void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx)
 
 	// Recurse down
 	Node::Draw(topMatrix, ctx);
-}
-
-void VulkanEngine::ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn)
-{
-	if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL)
-		return;
-
-	glm::vec2 mousePos = { static_cast<float>(xPosIn),  static_cast<float>(yPosIn) };
-
-	if (FirstMouse)
-	{
-		LastMousePos = mousePos;
-		FirstMouse = false;
-	}
-
-	glm::vec2 mouseOffset = { mousePos.x - LastMousePos.x, LastMousePos.y - mousePos.y };
-	LastMousePos = mousePos;
-
-	m_Camera.SetCameraDirection(mouseOffset);
 }

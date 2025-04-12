@@ -44,6 +44,28 @@ void Camera::ProcessKeyEvents(GLFWwindow* window, float deltaTime)
 	m_PreviousKeyState = m_CurrentKeyState;
 }
 
+void Camera::ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn)
+{
+	glm::vec2 mousePos = { static_cast<float>(xPosIn),  static_cast<float>(yPosIn) };
+	
+	if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL)
+	{
+		m_LastMousePos = mousePos;
+		return;
+	}
+
+	if (m_FirstMouse)
+	{
+		m_LastMousePos = mousePos;
+		m_FirstMouse = false;
+	}
+
+	glm::vec2 mouseOffset = { mousePos.x - m_LastMousePos.x, m_LastMousePos.y - mousePos.y };
+	m_LastMousePos = mousePos;
+
+	SetCameraDirection(mouseOffset);
+}
+
 glm::mat4 Camera::GetViewMatrix()
 {
 	m_Front = m_Orientation * glm::vec3(0.0f, 0.0f, -1.0f);

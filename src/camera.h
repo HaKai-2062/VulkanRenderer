@@ -11,6 +11,7 @@ class Camera
 public:
 	Camera(glm::vec3 position = glm::vec3(0.0f, -2.0f, 2.0f));
 	void ProcessKeyEvents(GLFWwindow* window, float deltaTime);
+	void ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn);
 	void SetCameraPosition(CameraMotion direction, float deltaTime);
 	void SetCameraDirection(glm::vec2 mouseoffset, bool constrainedPitch = true);
 	glm::mat4 GetViewMatrix();
@@ -33,4 +34,6 @@ private:
 	bool m_MouseLocked = false;
 	std::array<bool, GLFW_KEY_LAST> m_PreviousKeyState{};
 	std::array<bool, GLFW_KEY_LAST> m_CurrentKeyState{};
+	glm::vec2 m_LastMousePos{ 0.0f, 0.0f };
+	bool m_FirstMouse = true;
 };

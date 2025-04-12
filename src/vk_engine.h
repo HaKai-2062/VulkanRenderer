@@ -90,7 +90,7 @@ private:
 	GLTFMetallic_Roughness m_MetalRoughMaterial;
 	DrawContext m_MainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> m_LoadedNodes;
-	static Camera m_Camera;
+	Camera m_Camera;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -152,6 +152,5 @@ private:
 	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	void DestroyImage(const AllocatedImage& image);
-	static void ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn);
 	void UpdateScene();
 };
