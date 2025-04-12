@@ -28,6 +28,11 @@ static const bool bUseValidationLayers = false;
 static const bool bUseValidationLayers = true;
 #endif
 
+static VkExtent2D ScreenSize{ 1920, 1080 };
+glm::vec2 LastMousePos{ ScreenSize.width / 2.0f, ScreenSize.height / 2.0f };
+bool FirstMouse = true;
+Camera VulkanEngine::m_Camera;
+
 void VulkanEngine::Init()
 {
 	fmt::print(fmt::fg(fmt::color::green), "Application Created\n");
@@ -35,6 +40,7 @@ void VulkanEngine::Init()
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+	m_WindowExtent = ScreenSize;
 	m_Window = glfwCreateWindow(m_WindowExtent.width, m_WindowExtent.height, "Vulkan Engine", nullptr, nullptr);
 
 	InitVulkan();
@@ -45,6 +51,8 @@ void VulkanEngine::Init()
 	InitPipelines();
 	InitImGui();
 	InitDefaultData();
+
+	glfwSetCursorPosCallback(m_Window, VulkanEngine::ProcessMouseEvents);
 
 	m_IsInitialized = true;
 }
@@ -103,6 +111,8 @@ void VulkanEngine::MainLoop()
 			continue;
 		}
 
+		m_Camera.ProcessKeyEvents(m_Window, m_DeltaTime);
+
 		if (m_ResizeRequested)
 		{
 			ResizeSwapchain();
@@ -134,7 +144,7 @@ void VulkanEngine::MainLoop()
 		//make imgui calculate internal draw structures
 		ImGui::Render();
 
-		AddFPSToTitle();
+		UpdateDeltaTimeAndTitle();
 		DrawFrame();
 	}
 }
@@ -1070,18 +1080,19 @@ void VulkanEngine::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
 	vkCmdEndRendering(cmd);
 }
 
-void VulkanEngine::AddFPSToTitle()
+void VulkanEngine::UpdateDeltaTimeAndTitle()
 {
+	// Update Title
 	static float lastTime = 0.0f;
 	static uint32_t nFrames = 0;
 
 	float currentTime = static_cast<float>(glfwGetTime());
-	m_DeltaTime = currentTime - lastTime;
+	m_TitleUpdateTime = currentTime - lastTime;
 	nFrames++;
 
-	if (m_DeltaTime >= 1.0)
+	if (m_TitleUpdateTime >= 1.0)
 	{
-		uint32_t fps = static_cast<uint32_t>(nFrames / m_DeltaTime);
+		uint32_t fps = static_cast<uint32_t>(nFrames / m_TitleUpdateTime);
 
 		float delay = static_cast<uint32_t>(100'000.0f / nFrames) / 100.0f;
 
@@ -1092,6 +1103,10 @@ void VulkanEngine::AddFPSToTitle()
 		nFrames = 0;
 		lastTime = currentTime;
 	}
+
+	// Update delta
+	m_DeltaTime = currentTime - m_LastFrameTime;
+	m_LastFrameTime = currentTime;
 }
 
 void VulkanEngine::InitImGui()
@@ -1264,7 +1279,7 @@ void VulkanEngine::UpdateScene()
 	m_MainDrawContext.OpaqueSurfaces.clear();
 	m_LoadedNodes["Suzanne"]->Draw(glm::mat4(1.0f), m_MainDrawContext);
 
-	m_SceneData.View = glm::translate(glm::vec3{ 0.0f, 0.0f, -5.0f });
+	m_SceneData.View = m_Camera.GetViewMatrix();
 	m_SceneData.Proj = glm::perspective(glm::radians(70.f), (float)m_WindowExtent.width / (float)m_WindowExtent.height, 10000.f, 0.1f);
 	m_SceneData.Proj[1][1] *= -1;
 	m_SceneData.ViewProj = m_SceneData.Proj * m_SceneData.View;
@@ -1304,4 +1319,23 @@ void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx)
 
 	// Recurse down
 	Node::Draw(topMatrix, ctx);
+}
+
+void VulkanEngine::ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn)
+{
+	if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL)
+		return;
+
+	glm::vec2 mousePos = { static_cast<float>(xPosIn),  static_cast<float>(yPosIn) };
+
+	if (FirstMouse)
+	{
+		LastMousePos = mousePos;
+		FirstMouse = false;
+	}
+
+	glm::vec2 mouseOffset = { mousePos.x - LastMousePos.x, LastMousePos.y - mousePos.y };
+	LastMousePos = mousePos;
+
+	m_Camera.SetCameraDirection(mouseOffset);
 }

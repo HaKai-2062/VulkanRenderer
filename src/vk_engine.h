@@ -5,6 +5,7 @@
 
 #include "vk_types.h"
 #include "vk_loader.h"
+#include "camera.h"
 
 struct ComputePushConstants
 {
@@ -60,7 +61,9 @@ private:
 	bool m_IsInitialized{ false };
 	bool m_ResizeRequested{ false };
 	int m_FrameNumber{ 0 };
+	float m_LastFrameTime{ 0 };
 	float m_DeltaTime{ 0 };
+	float m_TitleUpdateTime{ 0 };
 	VkExtent2D m_WindowExtent{ 1920 , 1080 };
 	struct GLFWwindow* m_Window{ nullptr };
 	std::vector<ComputeEffect> m_BGEffects;
@@ -87,6 +90,7 @@ private:
 	GLTFMetallic_Roughness m_MetalRoughMaterial;
 	DrawContext m_MainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> m_LoadedNodes;
+	static Camera m_Camera;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -135,7 +139,8 @@ private:
 	void InitMeshPipeline();
 	void InitDefaultData();
 
-	void AddFPSToTitle();
+
+	void UpdateDeltaTimeAndTitle();
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
 	void ResizeSwapchain();
@@ -147,5 +152,6 @@ private:
 	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	void DestroyImage(const AllocatedImage& image);
+	static void ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn);
 	void UpdateScene();
 };
