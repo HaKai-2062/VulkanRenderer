@@ -1,7 +1,5 @@
 #include "camera.h"
 
-#include <iostream>
-
 Camera::Camera(glm::vec3 position)
 {
 	m_Position = position;

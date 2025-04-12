@@ -47,6 +47,7 @@ struct RenderObject
 struct DrawContext
 {
 	std::vector<RenderObject> OpaqueSurfaces;
+	std::vector<RenderObject> TransparentSurfaces;
 };
 
 class VulkanEngine
@@ -56,6 +57,10 @@ public:
 	AllocatedImage DrawImage;
 	AllocatedImage DepthImage;
 	VkDescriptorSetLayout GPUSceneDataDescriptorLayout;
+	AllocatedImage ErrorCheckerboardImage;
+	VkSampler DefaultSamplerLinear;
+	AllocatedImage WhiteImage;
+	GLTFMetallic_Roughness MetalRoughMaterial;
 
 private:
 	bool m_IsInitialized{ false };
@@ -79,18 +84,15 @@ private:
 	GPUMeshBuffers m_Rectangle;
 	std::vector<std::shared_ptr<MeshAsset>> m_TestMeshes;
 	GPUSceneData m_SceneData;
-	AllocatedImage m_WhiteImage;
 	AllocatedImage m_BlackImage;
 	AllocatedImage m_GreyImage;
-	AllocatedImage m_ErrorCheckerboardImage;
-	VkSampler m_DefaultSamplerLinear;
 	VkSampler m_DefaultSamplerNearest;
 	VkDescriptorSetLayout m_SingleImageDescriptorLayout;
 	MaterialInstance m_DefaultData;
-	GLTFMetallic_Roughness m_MetalRoughMaterial;
 	DrawContext m_MainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> m_LoadedNodes;
 	Camera m_Camera;
+	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> m_LoadedScenes;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -125,6 +127,10 @@ public:
 	FrameData& GetCurrentFrame() { return m_Frames[m_FrameNumber % 2]; };
 	void ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 	GPUMeshBuffers UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
+	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+	void DestroyBuffer(const AllocatedBuffer& buffer);
+	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	void DestroyImage(const AllocatedImage& image);
 
 private:
 	void InitVulkan();
@@ -139,7 +145,6 @@ private:
 	void InitMeshPipeline();
 	void InitDefaultData();
 
-
 	void UpdateDeltaTimeAndTitle();
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
@@ -147,10 +152,6 @@ private:
 	void DrawBackground(VkCommandBuffer& cmd);
 	void DrawGeometry(VkCommandBuffer& cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
-	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
-	void DestroyBuffer(const AllocatedBuffer& buffer);
 	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-	void DestroyImage(const AllocatedImage& image);
 	void UpdateScene();
 };

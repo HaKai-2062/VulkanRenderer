@@ -183,7 +183,7 @@ struct GLTFMetallic_Roughness
 
 	VkDescriptorSetLayout MaterialLayout;
 
-	// 256 bytes in total because good default allignment
+	// 256 bytes in total because good default alignment
 	struct MaterialConstants
 	{
 		glm::vec4 ColorFactors;
@@ -192,13 +192,12 @@ struct GLTFMetallic_Roughness
 		glm::vec4 Extra[14];
 	};
 
-
 	struct MaterialResources
 	{
 		AllocatedImage ColorImage;
 		VkSampler ColorSampler;
 		AllocatedImage MetalRoughImage;
-		VkSampler	MetalRoughSampler;
+		VkSampler MetalRoughSampler;
 		VkBuffer DataBuffer;
 		uint32_t DataBufferOffset;
 	};

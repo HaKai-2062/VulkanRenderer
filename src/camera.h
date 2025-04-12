@@ -9,7 +9,7 @@
 class Camera
 {
 public:
-	Camera(glm::vec3 position = glm::vec3(0.0f, -2.0f, 2.0f));
+	Camera(glm::vec3 position = glm::vec3(30.f, -00.f, -085.f));
 	void ProcessKeyEvents(GLFWwindow* window, float deltaTime);
 	void ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn);
 	void SetCameraPosition(CameraMotion direction, float deltaTime);
@@ -17,7 +17,7 @@ public:
 	glm::mat4 GetViewMatrix();
 
 public:
-	float Yaw = -90.0f;
+	float Yaw = 0.0f;
 	float Pitch = 0.0f;
 
 private:

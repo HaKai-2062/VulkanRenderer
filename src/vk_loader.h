@@ -2,7 +2,7 @@
 
 #include <unordered_map>
 #include <filesystem>
-
+#include <fastgltf/core.hpp>
 #include "vk_types.h"
 
 class VulkanEngine;
@@ -26,4 +26,30 @@ struct MeshAsset
 	GPUMeshBuffers MeshBuffers;
 };
 
-std::optional<std::vector<std::shared_ptr<MeshAsset>>> LoadGltfMeshes(VulkanEngine* engine, std::filesystem::path filePath);
+struct LoadedGLTF : public IRenderable
+{
+    // Storage for all the data on a given glTF file
+    std::unordered_map<std::string, std::shared_ptr<MeshAsset>> Meshes;
+    std::unordered_map<std::string, std::shared_ptr<Node>> Nodes;
+    std::unordered_map<std::string, AllocatedImage> Images;
+    std::unordered_map<std::string, std::shared_ptr<GLTFMaterial>> Materials;
+
+    // Nodes without a parent, for iterating through the file in tree order
+    // Could be useful for displaying nodes in editor
+    std::vector<std::shared_ptr<Node>> TopNodes;
+
+    std::vector<VkSampler> Samplers;
+    DescriptorAllocatorDynamic DescriptorPool;
+    AllocatedBuffer MaterialDataBuffer;
+    VulkanEngine* Engine;
+
+    ~LoadedGLTF() { ClearAll(); };
+    virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx);
+
+private:
+
+    void ClearAll();
+};
+
+std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, std::string_view filePath);
+std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image);

@@ -57,6 +57,9 @@ void VulkanEngine::Cleanup()
 	{
 		vkDeviceWaitIdle(Device);
 
+		// Make sure GPU has stopped doing its things
+		m_LoadedScenes.clear();
+
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
 			vkDestroyCommandPool(Device, m_Frames[i].CommandPool, nullptr);
@@ -74,7 +77,7 @@ void VulkanEngine::Cleanup()
 			DestroyBuffer(mesh->MeshBuffers.VertexBuffer);
 		}
 
-		m_MetalRoughMaterial.ClearResources(Device);
+		MetalRoughMaterial.ClearResources(Device);
 
 		// Flush global deletion queue
 		m_MainDeletionQueue.Flush();
@@ -546,7 +549,7 @@ void VulkanEngine::InitPipelines()
 	InitTrianglePipeline();
 	InitMeshPipeline();
 
-	m_MetalRoughMaterial.BuildPipelines(this);
+	MetalRoughMaterial.BuildPipelines(this);
 }
 
 void VulkanEngine::InitBackgroundPipelines()
@@ -741,11 +744,11 @@ void VulkanEngine::InitDefaultData()
 		DestroyBuffer(m_Rectangle.VertexBuffer);
 		});
 
-	m_TestMeshes = LoadGltfMeshes(this, ASSET_PATH "basicmesh.glb").value();
+	//m_TestMeshes = LoadGltfMeshes(this, ASSET_PATH "basicmesh.glb").value();
 
 	//3 default textures, white, grey, black. 1 pixel each
 	uint32_t white = glm::packUnorm4x8(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-	m_WhiteImage = CreateImage((void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	WhiteImage = CreateImage((void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 	uint32_t grey = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 0.66f));
 	m_GreyImage = CreateImage((void*)&grey, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 	uint32_t black = glm::packUnorm4x8(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
@@ -762,7 +765,7 @@ void VulkanEngine::InitDefaultData()
 		}
 	}
 	
-	m_ErrorCheckerboardImage = CreateImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	ErrorCheckerboardImage = CreateImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 	
 	VkSamplerCreateInfo sampler = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 	sampler.magFilter = VK_FILTER_NEAREST;
@@ -770,57 +773,22 @@ void VulkanEngine::InitDefaultData()
 	vkCreateSampler(Device, &sampler, nullptr, &m_DefaultSamplerNearest);
 	sampler.magFilter = VK_FILTER_LINEAR;
 	sampler.minFilter = VK_FILTER_LINEAR;
-	vkCreateSampler(Device, &sampler, nullptr, &m_DefaultSamplerLinear);
+	vkCreateSampler(Device, &sampler, nullptr, &DefaultSamplerLinear);
 
 	m_MainDeletionQueue.PushFunction([&]() {
 		vkDestroySampler(Device, m_DefaultSamplerNearest, nullptr),
-		vkDestroySampler(Device, m_DefaultSamplerLinear, nullptr),
+		vkDestroySampler(Device, DefaultSamplerLinear, nullptr),
 
-		DestroyImage(m_WhiteImage);
+		DestroyImage(WhiteImage);
 		DestroyImage(m_GreyImage);
 		DestroyImage(m_BlackImage);
-		DestroyImage(m_ErrorCheckerboardImage);
+		DestroyImage(ErrorCheckerboardImage);
 		});
 
-	GLTFMetallic_Roughness::MaterialResources materialResources;
-	// Default the material textures
-	materialResources.ColorImage = m_WhiteImage;
-	materialResources.ColorSampler = m_DefaultSamplerLinear;
-	materialResources.MetalRoughImage = m_WhiteImage;
-	materialResources.MetalRoughSampler = m_DefaultSamplerLinear;
-
-	// Set the uniform buffer for the material data
-	AllocatedBuffer materialConstants = CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-	// Write the buffer
-	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData = (GLTFMetallic_Roughness::MaterialConstants*)materialConstants.Allocation->GetMappedData();
-	sceneUniformData->ColorFactors = glm::vec4{ 1,1,1,1 };
-	sceneUniformData->MetalRoughFactors = glm::vec4{ 1,0.5,0,0 };
-
-	m_MainDeletionQueue.PushFunction([=, this]() {
-		DestroyBuffer(materialConstants);
-		});
-
-	materialResources.DataBuffer = materialConstants.Buffer;
-	materialResources.DataBufferOffset = 0;
-
-	m_DefaultData = m_MetalRoughMaterial.WriteMaterial(Device, MaterialPass::MainColor, materialResources, m_GlobalDescriptorAllocator);
-
-	for (auto& mesh : m_TestMeshes)
-	{
-		std::shared_ptr<MeshNode> newNode = std::make_shared<MeshNode>();
-		newNode->Mesh = mesh;
-
-		newNode->LocalTransform = glm::mat4(1.0f);
-		newNode->WorldTransform = glm::mat4(1.0f);
-
-		for (auto& surface : newNode->Mesh->Surfaces)
-		{
-			surface.Material = std::make_shared<GLTFMaterial>(m_DefaultData);
-		}
-
-		m_LoadedNodes[mesh->Name] = std::move(newNode);
-	}
+	std::string structurePath = { ASSET_PATH "structure.glb" };
+	auto structureFile = loadGltfScene(this, structurePath);
+	assert(structureFile.has_value());
+	m_LoadedScenes["structure"] = *structureFile;
 }
 
 void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
@@ -919,7 +887,6 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 
 	matData.MaterialSet = descriptorAllocator.Allocate(device, MaterialLayout);
 
-
 	Writer.Clear();
 	Writer.WriteBuffer(0, resources.DataBuffer, sizeof(MaterialConstants), resources.DataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	Writer.WriteImage(1, resources.ColorImage.ImageView, resources.ColorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
@@ -963,6 +930,7 @@ void VulkanEngine::DestroySwapchain()
 void VulkanEngine::ResizeSwapchain()
 {
 	vkDeviceWaitIdle(Device);
+	
 	DestroySwapchain();
 
 	int w, h;
@@ -1062,7 +1030,35 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 		vkCmdDrawIndexed(cmd, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
 	}
 
+	auto draw = [&](const RenderObject& draw)
+		{
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.Material->Pipeline->Pipeline);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.Material->Pipeline->Layout, 0, 1, &globalDescriptor, 0, nullptr);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.Material->Pipeline->Layout, 1, 1, &draw.Material->MaterialSet, 0, nullptr);
+
+		vkCmdBindIndexBuffer(cmd, draw.IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+		GPUDrawPushConstants pushConstants;
+		pushConstants.VertexBufferAddress = draw.VertexBufferAddress;
+		pushConstants.WorldMatrix = draw.Transform;
+		vkCmdPushConstants(cmd, draw.Material->Pipeline->Layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+		vkCmdDrawIndexed(cmd, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
+		};
+
+	for (auto& r : m_MainDrawContext.OpaqueSurfaces)
+	{
+		draw(r);
+	}
+
+	for (auto& r : m_MainDrawContext.TransparentSurfaces)
+	{
+		draw(r);
+	}
+
 	////////////////////////////////////////////////////////////////////////
+
+
+
 	vkCmdEndRendering(cmd);
 }
 
@@ -1275,7 +1271,7 @@ void VulkanEngine::DestroyImage(const AllocatedImage& image)
 void VulkanEngine::UpdateScene()
 {
 	m_MainDrawContext.OpaqueSurfaces.clear();
-	m_LoadedNodes["Suzanne"]->Draw(glm::mat4(1.0f), m_MainDrawContext);
+	//m_LoadedNodes["Suzanne"]->Draw(glm::mat4(1.0f), m_MainDrawContext);
 
 	m_SceneData.View = m_Camera.GetViewMatrix();
 	m_SceneData.Proj = glm::perspective(glm::radians(70.f), (float)m_WindowExtent.width / (float)m_WindowExtent.height, 10000.f, 0.1f);
@@ -1287,14 +1283,16 @@ void VulkanEngine::UpdateScene()
 	m_SceneData.SunlightColor = glm::vec4(1.0f);
 	m_SceneData.SunlightDirection = glm::vec4(0.0f, 1.0f, 0.5f, 1.0f);
 
-	for (int x = -3; x < 3; x++)
-	{
+	//for (int x = -3; x < 3; x++)
+	//{
 
-		glm::mat4 scale = glm::scale(glm::vec3{ 0.2f });
-		glm::mat4 translation = glm::translate(glm::vec3{ x, 1.0f, 0.0f });
+	//	glm::mat4 scale = glm::scale(glm::vec3{ 0.2f });
+	//	glm::mat4 translation = glm::translate(glm::vec3{ x, 1.0f, 0.0f });
 
-		m_LoadedNodes["Cube"]->Draw(translation * scale, m_MainDrawContext);
-	}
+	//	m_LoadedNodes["Cube"]->Draw(translation * scale, m_MainDrawContext);
+	//}
+
+	m_LoadedScenes["structure"]->Draw(glm::mat4{ 1.f }, m_MainDrawContext);
 }
 
 void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx)
