@@ -918,7 +918,7 @@ void VulkanEngine::CreateSwapchain(uint32_t width, uint32_t height)
 	vkb::Swapchain vkbSwapchain = swapchainBuilder
 		//.use_default_format_selection()
 		.set_desired_format(VkSurfaceFormatKHR{ .format = m_SwapchainFormat, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
-		.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
+		.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
 		.set_desired_extent(width, height)
 		.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 		.build()
@@ -1247,7 +1247,7 @@ AllocatedImage VulkanEngine::CreateImage(VkExtent3D size, VkFormat format, VkIma
 	VkImageCreateInfo imageInfo = VkInit::imageCreateInfo(format, usage, size);
 	if (mipmapped)
 	{
-		imageInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height))));
+		imageInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
 	}
 
 	// Allocate memory on GPU
