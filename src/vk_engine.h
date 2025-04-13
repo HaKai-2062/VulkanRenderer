@@ -39,7 +39,7 @@ struct RenderObject
 	VkBuffer IndexBuffer;
 
 	MaterialInstance* Material;
-
+	Bounds Bounds;
 	glm::mat4 Transform;
 	VkDeviceAddress VertexBufferAddress;
 };
@@ -48,6 +48,15 @@ struct DrawContext
 {
 	std::vector<RenderObject> OpaqueSurfaces;
 	std::vector<RenderObject> TransparentSurfaces;
+};
+
+struct EngineStats
+{
+	float FrameTime;
+	int TriangleCount;
+	int DrawcallCount;
+	float SceneUpdateTime;
+	float MeshDrawTime;
 };
 
 class VulkanEngine
@@ -69,7 +78,7 @@ private:
 	float m_LastFrameTime{ 0 };
 	float m_DeltaTime{ 0 };
 	float m_TitleUpdateTime{ 0 };
-	VkExtent2D m_WindowExtent{ 1920 , 1080 };
+	VkExtent2D m_WindowExtent{ 100 , 100 };
 	struct GLFWwindow* m_Window{ nullptr };
 	std::vector<ComputeEffect> m_BGEffects;
 	int m_CurrentBGEffect{ 0 };
@@ -79,6 +88,7 @@ private:
 	FrameData m_Frames[MAX_FRAMES_IN_FLIGHT];
 	DeletionQueue m_MainDeletionQueue;
 	VmaAllocator m_Allocator;
+	EngineStats Stats;
 
 	DescriptorAllocatorDynamic m_GlobalDescriptorAllocator;
 	GPUMeshBuffers m_Rectangle;
@@ -149,7 +159,7 @@ private:
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
 	void ResizeSwapchain();
-	void DrawBackground(VkCommandBuffer& cmd);
+	void DrawMain(VkCommandBuffer& cmd);
 	void DrawGeometry(VkCommandBuffer& cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);

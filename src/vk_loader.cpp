@@ -74,7 +74,7 @@ std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& a
 				imagesize.height = height;
 				imagesize.depth = 1;
 
-				newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+				newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 
 				stbi_image_free(data);
 			}
@@ -90,7 +90,7 @@ std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& a
 				imagesize.height = height;
 				imagesize.depth = 1;
 
-				newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+				newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 
 				stbi_image_free(data);
 			}
@@ -119,7 +119,7 @@ std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& a
 						imagesize.depth = 1;
 
 						newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, 
-							VK_IMAGE_USAGE_SAMPLED_BIT, false);
+							VK_IMAGE_USAGE_SAMPLED_BIT, true);
 
 						stbi_image_free(data);
 					}
@@ -376,6 +376,18 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, s
 				newSurface.Material = materials[0];
 			}
 
+			glm::vec3 minpos = vertices[initialVtx].Position;
+			glm::vec3 maxpos = vertices[initialVtx].Position;
+
+			for (int i = initialVtx; i < vertices.size(); i++)
+			{
+				minpos = glm::min(minpos, vertices[i].Position);
+				maxpos = glm::max(maxpos, vertices[i].Position);
+			}
+
+			newSurface.Bounds.Origin = (maxpos + minpos) / 2.0f;
+			newSurface.Bounds.Extents = (maxpos - minpos) / 2.0f;
+			newSurface.Bounds.SphereRadius = glm::length(newSurface.Bounds.Extents);
 			newmesh->Surfaces.push_back(newSurface);
 		}
 
