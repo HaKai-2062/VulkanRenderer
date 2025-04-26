@@ -69,6 +69,7 @@ public:
 	AllocatedImage ErrorCheckerboardImage;
 	VkSampler DefaultSamplerLinear;
 	AllocatedImage WhiteImage;
+	AllocatedImage PurpleImage;
 	GLTFMetallic_Roughness MetalRoughMaterial;
 
 private:
@@ -81,7 +82,7 @@ private:
 	VkExtent2D m_WindowExtent{ 100 , 100 };
 	struct GLFWwindow* m_Window{ nullptr };
 	std::vector<ComputeEffect> m_BGEffects;
-	int m_CurrentBGEffect{ 0 };
+	int m_CurrentBGEffect{ 1 };
 
 	VkExtent2D m_DrawExtent;
 	float m_RenderScale = 1.0f;
@@ -94,8 +95,8 @@ private:
 	GPUMeshBuffers m_Rectangle;
 	std::vector<std::shared_ptr<MeshAsset>> m_TestMeshes;
 	GPUSceneData m_SceneData;
-	AllocatedImage m_BlackImage;
-	AllocatedImage m_GreyImage;
+	//AllocatedImage m_BlackImage;
+	//AllocatedImage m_GreyImage;
 	VkSampler m_DefaultSamplerNearest;
 	VkDescriptorSetLayout m_SingleImageDescriptorLayout;
 	MaterialInstance m_DefaultData;
@@ -161,6 +162,7 @@ private:
 	void ResizeSwapchain();
 	void DrawMain(VkCommandBuffer& cmd);
 	void DrawGeometry(VkCommandBuffer& cmd);
+	void DrawMesh(VkCommandBuffer& cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	void UpdateScene();

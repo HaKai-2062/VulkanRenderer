@@ -9,7 +9,9 @@
 class Camera
 {
 public:
-	Camera(glm::vec3 position = glm::vec3(30.f, -00.f, -085.f));
+	Camera(glm::vec3 position = glm::vec3(10.0f, 5.0f, 25.f));
+	const glm::vec3 GetCameraPosition() { return m_Position; }
+	const glm::vec3 GetCameraOrientation() { return m_Front; }
 	void ProcessKeyEvents(GLFWwindow* window, float deltaTime);
 	void ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn);
 	void SetCameraPosition(CameraMotion direction, float deltaTime);
@@ -27,7 +29,7 @@ private:
 	glm::vec3 m_Right{ 0.0f };
 	glm::quat m_Orientation{ 1.0f, 0.0f, 0.0f, 0.0f };
 
-	float m_Speed = 2.5f;
+	float m_Speed = 20.5f;
 	float m_Sensitivity = 0.05f;
 	float m_Zoom = 45.0f;
 

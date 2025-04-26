@@ -259,6 +259,10 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, s
 		materialResources.ColorSampler = engine->DefaultSamplerLinear;
 		materialResources.MetalRoughImage = engine->WhiteImage;
 		materialResources.MetalRoughSampler = engine->DefaultSamplerLinear;
+		materialResources.AOImage = engine->WhiteImage;
+		materialResources.AOSampler = engine->DefaultSamplerLinear;
+		materialResources.NormalMapImage = engine->PurpleImage;
+		materialResources.NormalMapSampler = engine->DefaultSamplerLinear;
 
 		// Set the uniform buffer for the material data
 		materialResources.DataBuffer = file.MaterialDataBuffer.Buffer;
@@ -272,6 +276,22 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, s
 
 			materialResources.ColorImage = images[img];
 			materialResources.ColorSampler = file.Samplers[sampler];
+		}
+		if (mat.occlusionTexture.has_value())
+		{
+			size_t img = gltf.textures[mat.occlusionTexture.value().textureIndex].imageIndex.value();
+			size_t sampler = gltf.textures[mat.occlusionTexture.value().textureIndex].samplerIndex.value();
+
+			materialResources.AOImage = images[img];
+			materialResources.AOSampler = file.Samplers[sampler];
+		}
+		if (mat.normalTexture.has_value())
+		{
+			size_t img = gltf.textures[mat.normalTexture.value().textureIndex].imageIndex.value();
+			size_t sampler = gltf.textures[mat.normalTexture.value().textureIndex].samplerIndex.value();
+
+			materialResources.NormalMapImage = images[img];
+			materialResources.NormalMapSampler = file.Samplers[sampler];
 		}
 
 		// Build material
@@ -360,11 +380,23 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, s
 			auto colors = p.findAttribute("COLOR_0");
 			if (colors != p.attributes.end())
 			{
-				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltf, gltf.accessors[(*colors).accessorIndex],
-					[&](glm::vec4 v, size_t index)
-					{
-						vertices[initialVtx + index].Color = v;
-					});
+				auto& accessor = gltf.accessors[(*colors).accessorIndex];
+				if (accessor.type == fastgltf::AccessorType::Vec3)
+				{
+					fastgltf::iterateAccessorWithIndex<glm::vec3>(gltf, gltf.accessors[(*colors).accessorIndex],
+						[&](glm::vec3 v, size_t index)
+						{
+							vertices[initialVtx + index].Color = glm::vec4(v, 1.0f);
+						});
+				}
+				else
+				{
+					fastgltf::iterateAccessorWithIndex<glm::vec4>(gltf, gltf.accessors[(*colors).accessorIndex],
+						[&](glm::vec4 v, size_t index)
+						{
+							vertices[initialVtx + index].Color = v;
+						});
+				}
 			}
 
 			if (p.materialIndex.has_value())

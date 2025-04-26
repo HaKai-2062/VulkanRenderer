@@ -154,6 +154,8 @@ struct GPUSceneData
 	glm::vec4 AmbientColor;
 	glm::vec4 SunlightDirection; // w for sun power
 	glm::vec4 SunlightColor;
+	glm::vec4 CameraPosition;
+	float Time;
 };
 
 enum class MaterialPass : uint8_t
@@ -198,6 +200,10 @@ struct GLTFMetallic_Roughness
 		VkSampler ColorSampler;
 		AllocatedImage MetalRoughImage;
 		VkSampler MetalRoughSampler;
+		AllocatedImage AOImage;
+		VkSampler AOSampler;
+		AllocatedImage NormalMapImage;
+		VkSampler NormalMapSampler;
 		VkBuffer DataBuffer;
 		uint32_t DataBufferOffset;
 	};

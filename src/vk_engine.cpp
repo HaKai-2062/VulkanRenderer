@@ -135,6 +135,8 @@ void VulkanEngine::MainLoop()
 		{
 			ImGui::SliderFloat("Render Scale", &m_RenderScale, 0.3f, 1.f);
 
+			glm::vec3 pos = m_Camera.GetCameraPosition();
+			glm::vec3 rot = m_Camera.GetCameraOrientation();
 			ComputeEffect& selected = m_BGEffects[m_CurrentBGEffect];
 
 			ImGui::Text("Selected effect: ", selected.Name);
@@ -151,6 +153,11 @@ void VulkanEngine::MainLoop()
 			ImGui::Text("Update Time: %f ms", Stats.SceneUpdateTime);
 			ImGui::Text("Triangles:   %i", Stats.TriangleCount);
 			ImGui::Text("Draws:		  %i", Stats.DrawcallCount);
+
+			ImGui::NewLine();
+
+			ImGui::Text("Location:	  %f, %f, %f", pos.x, pos.y, pos.z);
+			ImGui::Text("Rotation:	  %f, %f, %f", rot.x, rot.y, rot.z);
 		}
 		ImGui::End();
 
@@ -689,7 +696,7 @@ void VulkanEngine::InitMeshPipeline()
 	VkShaderModule triangleFragShader;
 	VkShaderModule triangleVertexShader;
 
-	if (!VkUtils::loadShaderModule(SHADER_PATH "tex_image.frag.spv", Device, &triangleFragShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "colored_triangle.frag.spv", Device, &triangleFragShader))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when building tex_image frag shader\n");
 	}
@@ -719,8 +726,8 @@ void VulkanEngine::InitMeshPipeline()
 	pipelineBuilder.SetMultiSamplingNone();
 	pipelineBuilder.DisableBlending();
 	//pipelineBuilder.EnableBlendingAdditive();
-	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-	//pipelineBuilder.DisableDepthTest();
+	//pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GRfhEATER_OR_EQUAL);
+	pipelineBuilder.DisableDepthTest();
 
 	pipelineBuilder.SetColorAttachmentFormat(DrawImage.ImageFormat);
 	pipelineBuilder.SetDepthFormat(DepthImage.ImageFormat);
@@ -738,10 +745,10 @@ void VulkanEngine::InitMeshPipeline()
 void VulkanEngine::InitDefaultData()
 {
 	std::array<Vertex, 4> rectVertices;
-	rectVertices[0].Position = {  0.5f, -0.5f,  0.0f };
-	rectVertices[1].Position = {  0.5f,  0.5f,  0.0f };
-	rectVertices[2].Position = { -0.5f, -0.5f,  0.0f };
-	rectVertices[3].Position = { -0.5f,  0.5f,  0.0f };
+	rectVertices[0].Position = {  1.0f, -1.0f,  0.0f };
+	rectVertices[1].Position = {  1.0f,  1.0f,  0.0f };
+	rectVertices[2].Position = { -1.0f, -1.0f,  0.0f };
+	rectVertices[3].Position = { -1.0f,  1.0f,  0.0f };
 
 	rectVertices[0].Color = { 0.0f, 0.0f, 0.0f, 1.0f };
 	rectVertices[1].Color = { 0.5f, 0.5f, 0.5f, 1.0f };
@@ -759,13 +766,16 @@ void VulkanEngine::InitDefaultData()
 
 	//m_TestMeshes = LoadGltfMeshes(this, ASSET_PATH "basicmesh.glb").value();
 
-	//3 default textures, white, grey, black. 1 pixel each
+	// Default textures to fallback to if a texture is not provided in the pipeline
+	uint32_t black = glm::packUnorm4x8(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
 	uint32_t white = glm::packUnorm4x8(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
 	WhiteImage = CreateImage((void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-	uint32_t grey = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 0.66f));
-	m_GreyImage = CreateImage((void*)&grey, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-	uint32_t black = glm::packUnorm4x8(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
-	m_BlackImage = CreateImage((void*)&black, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	uint32_t purple = glm::packUnorm4x8(glm::vec4(0.5f, 0.5f, 1.0f, 1.0f));
+	PurpleImage = CreateImage((void*)&purple, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+
+	//uint32_t grey = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 0.66f));
+	//m_GreyImage = CreateImage((void*)&grey, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	//m_BlackImage = CreateImage((void*)&black, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	// Checkerboard image
 	uint32_t magenta = glm::packUnorm4x8(glm::vec4(1.0f, 0.0f, 1.0f, 1.0f));
@@ -793,12 +803,13 @@ void VulkanEngine::InitDefaultData()
 		vkDestroySampler(Device, DefaultSamplerLinear, nullptr),
 
 		DestroyImage(WhiteImage);
-		DestroyImage(m_GreyImage);
-		DestroyImage(m_BlackImage);
+		DestroyImage(PurpleImage);
+		//DestroyImage(m_GreyImage);
+		//DestroyImage(m_BlackImage);
 		DestroyImage(ErrorCheckerboardImage);
 		});
 
-	std::string structurePath = { ASSET_PATH "structure.glb" };
+	std::string structurePath = { ASSET_PATH "house2_with_sphere.glb" };
 	auto structureFile = loadGltfScene(this, structurePath);
 	assert(structureFile.has_value());
 	m_LoadedScenes["structure"] = *structureFile;
@@ -827,6 +838,8 @@ void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
 	layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	layoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	layoutBuilder.AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 	MaterialLayout = layoutBuilder.Build(engine->Device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
@@ -904,6 +917,8 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 	Writer.WriteBuffer(0, resources.DataBuffer, sizeof(MaterialConstants), resources.DataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	Writer.WriteImage(1, resources.ColorImage.ImageView, resources.ColorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	Writer.WriteImage(2, resources.MetalRoughImage.ImageView, resources.MetalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	Writer.WriteImage(3, resources.AOImage.ImageView, resources.AOSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	Writer.WriteImage(4, resources.NormalMapImage.ImageView, resources.NormalMapSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 	Writer.UpdateSet(device, matData.MaterialSet);
 
@@ -955,6 +970,20 @@ void VulkanEngine::ResizeSwapchain()
 	m_ResizeRequested = false;
 }
 
+void VulkanEngine::DrawMesh(VkCommandBuffer& cmd)
+{
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
+	
+	GPUDrawPushConstants pushConstants;
+	pushConstants.WorldMatrix = glm::mat4(1.0f);
+	pushConstants.VertexBufferAddress = m_Rectangle.VertexDeviceAddress;
+	
+	vkCmdPushConstants(cmd, m_MeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+	vkCmdBindIndexBuffer(cmd, m_Rectangle.IndexBuffer.Buffer, 0, VK_INDEX_TYPE_UINT32);
+	
+	vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+}
+
 void VulkanEngine::DrawMain(VkCommandBuffer& cmd)
 {
 	////////////////////////////////////////////////
@@ -971,7 +1000,6 @@ void VulkanEngine::DrawMain(VkCommandBuffer& cmd)
 	// execute the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
 	vkCmdDispatch(cmd, std::ceil(m_DrawExtent.width / 16.0f), std::ceil(m_DrawExtent.height / 16.0f), 1);
 
-
 	////////////////////////////////////////////////
 	
 	VkUtils::transitionImage(cmd, DrawImage.Image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -987,6 +1015,8 @@ void VulkanEngine::DrawMain(VkCommandBuffer& cmd)
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	Stats.MeshDrawTime = elapsed.count() / 1000.0f;
+
+	//DrawMesh(cmd);
 
 	vkCmdEndRendering(cmd);
 }
@@ -1333,6 +1363,9 @@ void VulkanEngine::UpdateScene()
 	m_SceneData.SunlightColor = glm::vec4(1.0f);
 	m_SceneData.SunlightDirection = glm::vec4(0.0f, 1.0f, 0.5f, 1.0f);
 
+	m_SceneData.CameraPosition = glm::vec4(m_Camera.GetCameraPosition(), 1.0);
+	m_SceneData.Time = glfwGetTime();
+
 	//for (int x = -3; x < 3; x++)
 	//{
 
@@ -1342,7 +1375,7 @@ void VulkanEngine::UpdateScene()
 	//	m_LoadedNodes["Cube"]->Draw(translation * scale, m_MainDrawContext);
 	//}
 
-	m_LoadedScenes["structure"]->Draw(glm::mat4{ 1.f }, m_MainDrawContext);
+	m_LoadedScenes["structure"]->Draw(glm::mat4{ 1.0f }, m_MainDrawContext);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
