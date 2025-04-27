@@ -13,7 +13,6 @@
 #include <fastgltf/types.hpp>
 #include <fastgltf/util.hpp>
 
-
 #include "vk_loader.h"
 #include "vk_engine.h"
 

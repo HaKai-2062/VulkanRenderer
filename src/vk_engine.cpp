@@ -514,10 +514,11 @@ void VulkanEngine::InitDescriptors()
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		DrawImageDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_COMPUTE_BIT);
 	}
-	// Send scene data to GPU
+	// Send scene and light data to GPU
 	{
 		DescriptorLayoutBuilder builder;
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		builder.AddBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		GPUSceneDataDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 	// Mesh shader
@@ -566,7 +567,7 @@ void VulkanEngine::InitPipelines()
 	InitBackgroundPipelines();
 
 	// Graphics
-	InitTrianglePipeline();
+	//InitTrianglePipeline();
 	InitMeshPipeline();
 
 	MetalRoughMaterial.BuildPipelines(this);
@@ -696,11 +697,11 @@ void VulkanEngine::InitMeshPipeline()
 	VkShaderModule triangleFragShader;
 	VkShaderModule triangleVertexShader;
 
-	if (!VkUtils::loadShaderModule(SHADER_PATH "colored_triangle.frag.spv", Device, &triangleFragShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.frag.spv", Device, &triangleFragShader))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when building tex_image frag shader\n");
 	}
-	if (!VkUtils::loadShaderModule(SHADER_PATH "colored_triangle_mesh.vert.spv", Device, &triangleVertexShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.vert.spv", Device, &triangleVertexShader))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when building colored_triangle vert shader\n");
 	}
@@ -726,8 +727,8 @@ void VulkanEngine::InitMeshPipeline()
 	pipelineBuilder.SetMultiSamplingNone();
 	pipelineBuilder.DisableBlending();
 	//pipelineBuilder.EnableBlendingAdditive();
-	//pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GRfhEATER_OR_EQUAL);
-	pipelineBuilder.DisableDepthTest();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	//pipelineBuilder.DisableDepthTest();
 
 	pipelineBuilder.SetColorAttachmentFormat(DrawImage.ImageFormat);
 	pipelineBuilder.SetDepthFormat(DepthImage.ImageFormat);
@@ -744,24 +745,39 @@ void VulkanEngine::InitMeshPipeline()
 
 void VulkanEngine::InitDefaultData()
 {
-	std::array<Vertex, 4> rectVertices;
-	rectVertices[0].Position = {  1.0f, -1.0f,  0.0f };
-	rectVertices[1].Position = {  1.0f,  1.0f,  0.0f };
-	rectVertices[2].Position = { -1.0f, -1.0f,  0.0f };
-	rectVertices[3].Position = { -1.0f,  1.0f,  0.0f };
+	std::array<Vertex, 8> cubeVertices;
+	cubeVertices[0].Position = {  1.0f, -1.0f,  1.0f, };
+	cubeVertices[1].Position = {  1.0f,  1.0f,  1.0f, };
+	cubeVertices[2].Position = { -1.0f, -1.0f,  1.0f, };
+	cubeVertices[3].Position = { -1.0f,  1.0f,  1.0f, };
+	cubeVertices[4].Position = {  1.0f, -1.0f, -1.0f, };
+	cubeVertices[5].Position = {  1.0f,  1.0f, -1.0f, };
+	cubeVertices[6].Position = { -1.0f, -1.0f, -1.0f, };
+	cubeVertices[7].Position = { -1.0f,  1.0f, -1.0f, };
 
-	rectVertices[0].Color = { 0.0f, 0.0f, 0.0f, 1.0f };
-	rectVertices[1].Color = { 0.5f, 0.5f, 0.5f, 1.0f };
-	rectVertices[2].Color = { 1.0f, 0.0f, 0.0f, 1.0f };
-	rectVertices[3].Color = { 0.0f, 1.0f, 0.0f, 1.0f };
+	for (uint32_t i = 0; i < 8; i++)
+		cubeVertices[i].Color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-	std::array<uint32_t, 6> rectIndices{ 0, 1, 2, 2, 1, 3 };
+	std::array<uint32_t, 36> cubeIndices = {
+		// Front face
+		0, 1, 2, 2, 1, 3,
+		// Back face
+		4, 5, 6, 6, 5, 7,
+		// Left face
+		4, 0, 6, 6, 0, 2,
+		// Right face
+		1, 5, 3, 3, 5, 7,
+		// Top face
+		1, 0, 5, 5, 0, 4,
+		// Bottom face
+		2, 3, 6, 6, 3, 7
+	};
 
-	m_Rectangle = UploadMesh(rectIndices, rectVertices);
+	m_Cube = UploadMesh(cubeIndices, cubeVertices);
 
 	m_MainDeletionQueue.PushFunction([&]() {
-		DestroyBuffer(m_Rectangle.IndexBuffer);
-		DestroyBuffer(m_Rectangle.VertexBuffer);
+		DestroyBuffer(m_Cube.IndexBuffer);
+		DestroyBuffer(m_Cube.VertexBuffer);
 		});
 
 	//m_TestMeshes = LoadGltfMeshes(this, ASSET_PATH "basicmesh.glb").value();
@@ -818,13 +834,13 @@ void VulkanEngine::InitDefaultData()
 void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
 {
 	VkShaderModule meshFragShader;
-	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.frag.spv", engine->Device, &meshFragShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "scene.frag.spv", engine->Device, &meshFragShader))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when building the triangle fragment shader module\n");
 	}
 
 	VkShaderModule meshVertexShader;
-	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.vert.spv", engine->Device, &meshVertexShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "scene.vert.spv", engine->Device, &meshVertexShader))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when building the triangle vertex shader module\n");
 	}
@@ -974,14 +990,18 @@ void VulkanEngine::DrawMesh(VkCommandBuffer& cmd)
 {
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
 	
-	GPUDrawPushConstants pushConstants;
-	pushConstants.WorldMatrix = glm::mat4(1.0f);
-	pushConstants.VertexBufferAddress = m_Rectangle.VertexDeviceAddress;
-	
-	vkCmdPushConstants(cmd, m_MeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
-	vkCmdBindIndexBuffer(cmd, m_Rectangle.IndexBuffer.Buffer, 0, VK_INDEX_TYPE_UINT32);
-	
-	vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+	for (uint32_t i = 0; i < m_Lights.TotalPointLights; i++)
+	{
+		GPUDrawPushConstants pushConstants;
+		glm::mat4 model = glm::translate(m_Lights.PointLights[i].Position) * glm::scale(glm::vec3(0.2f));
+		pushConstants.WorldMatrix = m_SceneData.ViewProj * model;
+		pushConstants.VertexBufferAddress = m_Cube.VertexDeviceAddress;
+
+		vkCmdPushConstants(cmd, m_MeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+		vkCmdBindIndexBuffer(cmd, m_Cube.IndexBuffer.Buffer, 0, VK_INDEX_TYPE_UINT32);
+
+		vkCmdDrawIndexed(cmd, 36, 1, 0, 0, 0);
+	}
 }
 
 void VulkanEngine::DrawMain(VkCommandBuffer& cmd)
@@ -1016,7 +1036,7 @@ void VulkanEngine::DrawMain(VkCommandBuffer& cmd)
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	Stats.MeshDrawTime = elapsed.count() / 1000.0f;
 
-	//DrawMesh(cmd);
+	DrawMesh(cmd);
 
 	vkCmdEndRendering(cmd);
 }
@@ -1050,18 +1070,23 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 		});
 
 	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	AllocatedBuffer lightDataBuffer = CreateBuffer(sizeof(LightData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	GetCurrentFrame().DeletionQueue.PushFunction([=, this]() {
 		DestroyBuffer(gpuSceneDataBuffer);
-	});
+		DestroyBuffer(lightDataBuffer);
+		});
 
 	GPUSceneData* sceneUniformData = (GPUSceneData*)gpuSceneDataBuffer.Allocation->GetMappedData();
 	*sceneUniformData = m_SceneData;
+	LightData* lightUniformData = (LightData*)lightDataBuffer.Allocation->GetMappedData();
+	*lightUniformData = m_Lights;
 
-	VkDescriptorSet globalDescriptor = GetCurrentFrame().FrameDescriptors.Allocate(Device, GPUSceneDataDescriptorLayout);
+	VkDescriptorSet sceneDescriptor = GetCurrentFrame().FrameDescriptors.Allocate(Device, GPUSceneDataDescriptorLayout);
 
 	DescriptorWriter writer;
 	writer.WriteBuffer(0, gpuSceneDataBuffer.Buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-	writer.UpdateSet(Device, globalDescriptor);
+	writer.WriteBuffer(1, lightDataBuffer.Buffer, sizeof(LightData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	writer.UpdateSet(Device, sceneDescriptor);
 
 	// Defined outside of the draw function, this is the state we will try to skip
 	MaterialPipeline* lastPipeline = nullptr;
@@ -1081,7 +1106,7 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 				lastPipeline = draw.Material->Pipeline;
 				vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.Material->Pipeline->Pipeline);
 				vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.Material->Pipeline->Layout, 0, 1, 
-					&globalDescriptor, 0, nullptr);
+					&sceneDescriptor, 0, nullptr);
 			
 				VkViewport viewport = {};
 				viewport.x = 0;
@@ -1365,6 +1390,20 @@ void VulkanEngine::UpdateScene()
 
 	m_SceneData.CameraPosition = glm::vec4(m_Camera.GetCameraPosition(), 1.0);
 	m_SceneData.Time = glfwGetTime();
+
+	float lightSpeed = 1.0f;
+	std::vector<glm::vec3> lightLocations = { glm::vec3(-8.0f, 8.5f, 0.0f), glm::vec3(33.0f, 8.5f, 0.0f) };
+	for (uint32_t i = 0; i < lightLocations.size(); i++)
+	{
+		PointLight light = {};
+		light.Position = lightLocations[i] + glm::vec3(8.0f * sin(glfwGetTime() * lightSpeed), 0.0f, 9.0f * cos(glfwGetTime() * lightSpeed));
+		light.Radius = 1.0f;
+		light.Color = glm::vec3(1.0f, 1.0f, 1.0f);
+		light.Intensity = 255.0f;
+
+		m_Lights.PointLights[i] = light;
+	}
+	m_Lights.TotalPointLights = lightLocations.size();
 
 	//for (int x = -3; x < 3; x++)
 	//{

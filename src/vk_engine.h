@@ -92,9 +92,10 @@ private:
 	EngineStats Stats;
 
 	DescriptorAllocatorDynamic m_GlobalDescriptorAllocator;
-	GPUMeshBuffers m_Rectangle;
+	GPUMeshBuffers m_Cube;
 	std::vector<std::shared_ptr<MeshAsset>> m_TestMeshes;
 	GPUSceneData m_SceneData;
+	LightData m_Lights;
 	//AllocatedImage m_BlackImage;
 	//AllocatedImage m_GreyImage;
 	VkSampler m_DefaultSamplerNearest;

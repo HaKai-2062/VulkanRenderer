@@ -5,11 +5,7 @@
 
 #include "input_structures.glsl"
 
-layout (location = 0) out vec3 v_Normal;
-layout (location = 1) out vec3 v_Color;
-layout (location = 2) out vec2 v_UV;
-layout (location = 3) out vec4 v_WorldPos;
-layout (location = 4) out vec4 v_MetalRoughFactor;
+layout (location = 0) out vec3 v_Color;
 
 struct Vertex
 {
@@ -34,14 +30,8 @@ layout(push_constant) uniform constants
 void main()
 {
 	Vertex v = PushConstants.VertexBuffer.Vertices[gl_VertexIndex];
-	vec4 position = vec4(v.Position, 1.0f);
-	v_WorldPos = PushConstants.RenderMatrix * position;
-
 	// This is proj * view * model * pos
-	gl_Position =  a_SceneData.ViewProj * v_WorldPos;
+	gl_Position = PushConstants.RenderMatrix * vec4(v.Position, 1.0f);
 
-	v_UV = vec2(v.UVX, v.UVY);
-	v_Normal = transpose(inverse(mat3(PushConstants.RenderMatrix))) * v.Normal;
-	v_Color = v.Color.rgb * a_MaterialData.ColorFactors.rgb;
-	v_MetalRoughFactor = a_MaterialData.MetalRoughFactors;
+	v_Color = v.Color.rgb;
 }

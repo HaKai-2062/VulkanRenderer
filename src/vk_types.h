@@ -16,6 +16,7 @@
 #include <glm/glm.hpp>
 
 constexpr unsigned int MAX_FRAMES_IN_FLIGHT = 2;
+constexpr unsigned int MAX_POINT_LIGHTS = 16;
 
 #define VK_CHECK(x)                                                 \
 	do                                                              \
@@ -156,6 +157,20 @@ struct GPUSceneData
 	glm::vec4 SunlightColor;
 	glm::vec4 CameraPosition;
 	float Time;
+};
+
+struct PointLight
+{
+	glm::vec3 Position;
+	float Radius;
+	glm::vec3 Color;
+	float Intensity;
+};
+
+struct LightData
+{
+	PointLight PointLights[MAX_POINT_LIGHTS];
+	uint32_t TotalPointLights;
 };
 
 enum class MaterialPass : uint8_t
