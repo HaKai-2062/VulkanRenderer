@@ -825,7 +825,7 @@ void VulkanEngine::InitDefaultData()
 		DestroyImage(ErrorCheckerboardImage);
 		});
 
-	std::string structurePath = { ASSET_PATH "house2_with_sphere.glb" };
+	std::string structurePath = { ASSET_PATH "Sponza/Sponza.gltf" };
 	auto structureFile = loadGltfScene(this, structurePath);
 	assert(structureFile.has_value());
 	m_LoadedScenes["structure"] = *structureFile;
@@ -879,7 +879,7 @@ void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
 	pipelineBuilder.SetShaders(meshVertexShader, meshFragShader);
 	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 	pipelineBuilder.SetMultiSamplingNone();
 	pipelineBuilder.DisableBlending();
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);

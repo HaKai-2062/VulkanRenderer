@@ -94,6 +94,22 @@ std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& a
 				stbi_image_free(data);
 			}
 		},
+		[&](fastgltf::sources::Array& array)
+		{
+			unsigned char* data = stbi_load_from_memory((stbi_uc*)array.bytes.data(), static_cast<int>(array.bytes.size()),
+				&width, &height, &nrChannels, 4);
+			if (data)
+			{
+				VkExtent3D imagesize;
+				imagesize.width = width;
+				imagesize.height = height;
+				imagesize.depth = 1;
+
+				newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+
+				stbi_image_free(data);
+			}
+		},
 		[&](fastgltf::sources::BufferView& view)
 		{
 			auto& bufferView = asset.bufferViews[view.bufferViewIndex];
@@ -152,8 +168,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, s
 
 	auto data = fastgltf::GltfDataBuffer::FromPath(filePath);
 	constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember | fastgltf::Options::AllowDouble | 
-		fastgltf::Options::LoadGLBBuffers | fastgltf::Options::LoadExternalBuffers;
-	// fastgltf::Options::LoadExternalImages;
+		fastgltf::Options::LoadGLBBuffers | fastgltf::Options::LoadExternalBuffers | fastgltf::Options::LoadExternalImages;
 
 	fastgltf::Asset gltf;
 	fastgltf::Parser parser{};
@@ -210,7 +225,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, s
 		if (img.has_value())
 		{
 			images.push_back(*img);
-			file.Images[image.name.c_str()] = *img;
+			file.Images.push_back(*img);
 		}
 		else
 		{
@@ -512,14 +527,14 @@ void LoadedGLTF::ClearAll()
 		Engine->DestroyBuffer(v->MeshBuffers.VertexBuffer);
 	}
 
-	for (auto& [k, v] : Images)
+	for (auto& image : Images)
 	{
-		if (v.Image == Engine->ErrorCheckerboardImage.Image)
+		if (image.Image == Engine->ErrorCheckerboardImage.Image)
 		{
 			// Dont destroy the default images
 			continue;
 		}
-		Engine->DestroyImage(v);
+		Engine->DestroyImage(image);
 	}
 
 	for (auto& sampler : Samplers)
