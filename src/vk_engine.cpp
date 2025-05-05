@@ -1,14 +1,11 @@
 #include <sstream>
 #include <array>
+#include <thread>
 #include <chrono>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
-
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 #include <VkBootstrap.h>
@@ -70,7 +67,7 @@ void VulkanEngine::Cleanup()
 			vkDestroySemaphore(Device, m_Frames[i].RenderSemaphore, nullptr);
 			vkDestroySemaphore(Device, m_Frames[i].SwapchainSemaphore, nullptr);
 
-			m_Frames[i].DeletionQueue.Flush();
+			m_Frames[i].FrameDeletionQueue.Flush();
 		}
 
 		for (auto& mesh : m_TestMeshes)
@@ -179,7 +176,7 @@ void VulkanEngine::DrawFrame()
 
 	// Wait until the gpu has finished rendering the last frame. Timeout of 1e9 ns
 	VK_CHECK(vkWaitForFences(Device, 1, &GetCurrentFrame().RenderFence, true, 1000000000));
-	GetCurrentFrame().DeletionQueue.Flush();
+	GetCurrentFrame().FrameDeletionQueue.Flush();
 	GetCurrentFrame().FrameDescriptors.ClearPools(Device);
 	VK_CHECK(vkResetFences(Device, 1, &GetCurrentFrame().RenderFence));
 
@@ -1071,7 +1068,7 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 
 	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	AllocatedBuffer lightDataBuffer = CreateBuffer(sizeof(LightData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	GetCurrentFrame().DeletionQueue.PushFunction([=, this]() {
+	GetCurrentFrame().FrameDeletionQueue.PushFunction([=, this]() {
 		DestroyBuffer(gpuSceneDataBuffer);
 		DestroyBuffer(lightDataBuffer);
 		});
@@ -1433,7 +1430,7 @@ void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx)
 		obj.IndexBuffer = Mesh->MeshBuffers.IndexBuffer.Buffer;
 		obj.Material = &surface.Material->Data;
 		
-		obj.Bounds = surface.Bounds;
+		obj.BoundingBox = surface.BoundingBox;
 		obj.Transform = nodeMatrix;
 		obj.VertexBufferAddress = Mesh->MeshBuffers.VertexDeviceAddress;
 
@@ -1473,7 +1470,7 @@ bool isVisible(const RenderObject& obj, const glm::mat4& viewproj)
 	for (int c = 0; c < 8; c++)
 	{
 		// project each corner into clip space
-		glm::vec4 v = matrix * glm::vec4(obj.Bounds.Origin + (corners[c] * obj.Bounds.Extents), 1.0f);
+		glm::vec4 v = matrix * glm::vec4(obj.BoundingBox.Origin + (corners[c] * obj.BoundingBox.Extents), 1.0f);
 
 		// perspective correction
 		v.x = v.x / v.w;

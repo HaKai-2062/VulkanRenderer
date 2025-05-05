@@ -1,10 +1,11 @@
 #pragma once
 
+#include <array>
+
 #include "vk_types.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <GLFW/glfw3.h>
-#include <array>
 
 class Camera
 {

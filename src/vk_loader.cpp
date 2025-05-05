@@ -4,8 +4,7 @@
 #include <variant>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#define GLM_ENABLE_EXPERIMENTAL
+#include <stb_image.h>
 #include <glm/gtx/quaternion.hpp>
 #include <gtc/type_ptr.hpp>
 #include <fastgltf/glm_element_traits.hpp>
@@ -431,9 +430,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, s
 				maxpos = glm::max(maxpos, vertices[i].Position);
 			}
 
-			newSurface.Bounds.Origin = (maxpos + minpos) / 2.0f;
-			newSurface.Bounds.Extents = (maxpos - minpos) / 2.0f;
-			newSurface.Bounds.SphereRadius = glm::length(newSurface.Bounds.Extents);
+			newSurface.BoundingBox.Origin = (maxpos + minpos) / 2.0f;
+			newSurface.BoundingBox.Extents = (maxpos - minpos) / 2.0f;
+			newSurface.BoundingBox.SphereRadius = glm::length(newSurface.BoundingBox.Extents);
 			newmesh->Surfaces.push_back(newSurface);
 		}
 

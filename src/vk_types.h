@@ -105,7 +105,7 @@ struct FrameData
 	VkSemaphore SwapchainSemaphore, RenderSemaphore;
 	// Wait till gpu has rendered to prevent overwriting gpu commands
 	VkFence RenderFence;
-	DeletionQueue DeletionQueue;
+	DeletionQueue FrameDeletionQueue;
 	DescriptorAllocatorDynamic FrameDescriptors;
 };
 

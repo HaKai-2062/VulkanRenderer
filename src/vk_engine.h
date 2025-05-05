@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <glm/glm.hpp>
 
 #include "vk_types.h"
 #include "vk_loader.h"
@@ -39,7 +38,7 @@ struct RenderObject
 	VkBuffer IndexBuffer;
 
 	MaterialInstance* Material;
-	Bounds Bounds;
+	Bounds BoundingBox;
 	glm::mat4 Transform;
 	VkDeviceAddress VertexBufferAddress;
 };
