@@ -1,6 +1,9 @@
 #include "vk_images.h"
 #include "vk_initializers.h"
 
+#include <ktx.h>
+#include <ktxvulkan.h>
+
 void VkUtils::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout)
 {
     VkImageMemoryBarrier2 imageBarrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
@@ -136,3 +139,32 @@ void VkUtils::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D ima
     // transition all mip levels into the final read_only layout
     transitionImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
+
+bool VkUtils::loadCubeMap(VkCommandBuffer cmd, std::string_view filename, VkFormat format)
+{
+    ktxTexture* ktxTexture;
+    ktxResult result = ktxTexture_CreateFromNamedFile(filename.data(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTexture);
+    if (result != KTX_SUCCESS)  return false;
+
+    ktx_uint32_t cubeMapWidth = ktxTexture->baseWidth;
+    ktx_uint32_t cubeMapHeight = ktxTexture->baseHeight;
+    ktx_uint32_t cubeMapMips = ktxTexture->numLevels;
+    ktx_uint8_t* cubeMapData = ktxTexture_GetData(ktxTexture);
+    ktx_size_t ktxTextureSize = ktxTexture_GetSize(ktxTexture);
+
+    // bufferCreateInfo to create stagging buffer
+    // set memory requirement and allocate memory
+    // copy data into stagging buffer
+    // 
+    // create image
+    // allocate memory for it
+    // 
+    // create command buffer and make VkBufferImagecopy for all miplevels
+    // set image layouts and copy from staging buffer to image
+    // create image sampler and image view and clear all resources
+
+    ktxTexture_Destroy(ktxTexture);
+
+    return true;
+}
+

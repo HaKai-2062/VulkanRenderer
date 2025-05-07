@@ -42,7 +42,7 @@ function(CloneRepository repositoryURL branchName projectName sourceDir customCM
 endfunction(CloneRepository)
 
 CloneRepository("https://github.com/glfw/glfw.git" "master" "GLFW" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/GLFW" "")
-CloneRepository("https://github.com/ocornut/imgui.git" "docking" "imgui-docking" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking" "../CMake/imgui-docking")
+CloneRepository("https://github.com/ocornut/imgui.git" "docking" "imgui-docking" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking" "../SkipDelete/imgui-docking")
 CloneRepository("https://github.com/g-truc/glm.git" "master" "GLM" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm" "")
 CloneRepository("https://github.com/nothings/stb.git" "master" "STB" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb" "")
 CloneRepository("https://github.com/tinyobjloader/tinyobjloader.git" "release" "tinyobjloader" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader" "")
@@ -66,6 +66,7 @@ add_subdirectory(vendor/vk-bootstrap)
 add_subdirectory(vendor/VMA)
 add_subdirectory(vendor/fmt)
 add_subdirectory(vendor/fastgltf)
+add_subdirectory(vendor/SkipDelete/ktx)
 
 # Dont specify dirs with custom CMakefiles.txt that arent in Git repo?
 #add_subdirectory(vendor/CMake/imgui-docking)
@@ -119,6 +120,8 @@ target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC
 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader"
 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/vk-bootstrap"
 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/VMA"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/SkipDelete/ktx/include"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/SkipDelete/ktx/other_include"
 "${Vulkan_INCLUDE_DIRS}")
 
 target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE 
@@ -130,6 +133,7 @@ vk-bootstrap
 VulkanMemoryAllocator
 fmt
 fastgltf
+libktx
 ${Vulkan_LIBRARIES})
 
 # Compile all shaders

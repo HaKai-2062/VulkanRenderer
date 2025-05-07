@@ -4,7 +4,7 @@ if exist "out" (rmdir /s /q "out" & echo Deleting out)
 
 setlocal enabledelayedexpansion
 cd vendor/
-set "keep_dir=CMake"
+set "keep_dir=SkipDelete"
 
 for /d %%D in (*) do (
     if /I not "%%D"=="%keep_dir%" (
