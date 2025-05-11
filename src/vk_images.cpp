@@ -4,7 +4,7 @@
 #include <ktx.h>
 #include <ktxvulkan.h>
 
-void VkUtils::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout)
+void VkUtils::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout, uint32_t mipLevels, uint32_t layerCount)
 {
     VkImageMemoryBarrier2 imageBarrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
     imageBarrier.pNext = nullptr;
@@ -21,6 +21,8 @@ void VkUtils::transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout 
 
     VkImageAspectFlags aspectMask = (newLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
     imageBarrier.subresourceRange = VkInit::imageSubresourceRange(aspectMask);
+    imageBarrier.subresourceRange.levelCount = mipLevels;
+    imageBarrier.subresourceRange.layerCount = layerCount;
     imageBarrier.image = image;
 
     VkDependencyInfo depInfo{};
@@ -140,29 +142,73 @@ void VkUtils::generateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D ima
     transitionImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
-bool VkUtils::loadCubeMap(VkCommandBuffer cmd, std::string_view filename, VkFormat format)
+bool VkUtils::loadCubeMap(VulkanEngine* engine, std::string_view filename, VkFormat format)
 {
     ktxTexture* ktxTexture;
     ktxResult result = ktxTexture_CreateFromNamedFile(filename.data(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTexture);
     if (result != KTX_SUCCESS)  return false;
 
-    ktx_uint32_t cubeMapWidth = ktxTexture->baseWidth;
-    ktx_uint32_t cubeMapHeight = ktxTexture->baseHeight;
-    ktx_uint32_t cubeMapMips = ktxTexture->numLevels;
-    ktx_uint8_t* cubeMapData = ktxTexture_GetData(ktxTexture);
+    ktx_uint32_t cubeWidth = ktxTexture->baseWidth;
+    ktx_uint32_t cubeHeight = ktxTexture->baseHeight;
+    ktx_uint32_t cubeMipMaps = ktxTexture->numLevels;
+    ktx_uint8_t* ktxTextureData = ktxTexture_GetData(ktxTexture);
     ktx_size_t ktxTextureSize = ktxTexture_GetSize(ktxTexture);
 
-    // bufferCreateInfo to create stagging buffer
-    // set memory requirement and allocate memory
-    // copy data into stagging buffer
-    // 
-    // create image
-    // allocate memory for it
-    // 
-    // create command buffer and make VkBufferImagecopy for all miplevels
-    // set image layouts and copy from staging buffer to image
-    // create image sampler and image view and clear all resources
+    std::vector<VkBufferImageCopy> bufferCopyRegions;
+    uint32_t offset = 0;
 
+    for (uint32_t face = 0; face < 6; face++)
+    {
+        for (uint32_t level = 0; level < cubeMipMaps; level++)
+        {
+            // Calculate offset into staging buffer for the current mip level and face
+            ktx_size_t offset;
+            KTX_error_code ret = ktxTexture_GetImageOffset(ktxTexture, level, 0, face, &offset);
+            if (result != KTX_SUCCESS)
+            {
+                ktxTexture_Destroy(ktxTexture);
+                return false;
+            }
+            VkBufferImageCopy bufferCopyRegion = {};
+            bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            bufferCopyRegion.imageSubresource.mipLevel = level;
+            bufferCopyRegion.imageSubresource.baseArrayLayer = face;
+            bufferCopyRegion.imageSubresource.layerCount = 1;
+            bufferCopyRegion.imageExtent.width = ktxTexture->baseWidth >> level;
+            bufferCopyRegion.imageExtent.height = ktxTexture->baseHeight >> level;
+            bufferCopyRegion.imageExtent.depth = 1;
+            bufferCopyRegion.bufferOffset = offset;
+            bufferCopyRegions.push_back(bufferCopyRegion);
+        }
+    }
+
+    // Upload image and imageview
+    engine->CubeMap = engine->UploadCubeMapImage((void*)ktxTextureData, bufferCopyRegions,
+        VkExtent3D{cubeWidth, cubeHeight, 1}, format, VK_IMAGE_USAGE_SAMPLED_BIT,
+        (uint32_t)cubeMipMaps, (size_t)ktxTextureSize);
+
+    // Create sampler
+    VkSamplerCreateInfo samplerInfo = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .pNext = nullptr };
+    samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
+    samplerInfo.minLod = 0;
+
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = samplerInfo.addressModeU;
+    samplerInfo.addressModeW = samplerInfo.addressModeU;
+    samplerInfo.maxLod = static_cast<float>(cubeMipMaps);
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    samplerInfo.maxAnisotropy = 1.0f;
+    //if (vulkanDevice->features.samplerAnisotropy)
+    //{
+    //    sampler.maxAnisotropy = vulkanDevice->properties.limits.maxSamplerAnisotropy;
+    //    sampler.anisotropyEnable = VK_TRUE;
+    //}
+    VK_CHECK(vkCreateSampler(engine->Device, &samplerInfo, nullptr, &engine->CubeMapSampler));
+
+    // Sampler must be destroyed by the function callee
     ktxTexture_Destroy(ktxTexture);
 
     return true;

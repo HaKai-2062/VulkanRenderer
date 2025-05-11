@@ -505,37 +505,43 @@ void VulkanEngine::InitDescriptors()
 
 	m_GlobalDescriptorAllocator.Init(Device, 10, sizes);
 
-	//make the descriptor set layout for our compute draw
+	// Set to send compute shader data
 	{
 		DescriptorLayoutBuilder builder;
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		DrawImageDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_COMPUTE_BIT);
+		m_DrawImageDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_COMPUTE_BIT);
 	}
-	// Send scene and light data to GPU
+	// Set to send scene, light and cubemap data to GPU
 	{
 		DescriptorLayoutBuilder builder;
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		builder.AddBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		//builder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		GPUSceneDataDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
-	// Mesh shader
+	// Set to send mesh data to GPU
 	{
 		DescriptorLayoutBuilder builder;
-		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		m_SingleImageDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
+	// Set to send cubemap data to GPU
+	{
+		//DescriptorLayoutBuilder builder;
+		//builder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	}
+
 	//allocate a descriptor set for our draw image
-	DrawImageDescriptors = m_GlobalDescriptorAllocator.Allocate(Device, DrawImageDescriptorLayout);
+	m_DrawImageDescriptors = m_GlobalDescriptorAllocator.Allocate(Device, m_DrawImageDescriptorLayout);
 
 	DescriptorWriter writer;
 	writer.WriteImage(0, DrawImage.ImageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-	writer.UpdateSet(Device, DrawImageDescriptors);
+	writer.UpdateSet(Device, m_DrawImageDescriptors);
 
 	//make sure both the descriptor allocator and the new layout get cleaned up properly
 	m_MainDeletionQueue.PushFunction([&]() {
 		m_GlobalDescriptorAllocator.DestroyPools(Device);
-		vkDestroyDescriptorSetLayout(Device, DrawImageDescriptorLayout, nullptr);
+		vkDestroyDescriptorSetLayout(Device, m_DrawImageDescriptorLayout, nullptr);
 		vkDestroyDescriptorSetLayout(Device, GPUSceneDataDescriptorLayout, nullptr);
 		vkDestroyDescriptorSetLayout(Device, m_SingleImageDescriptorLayout, nullptr);
 	});
@@ -565,6 +571,7 @@ void VulkanEngine::InitPipelines()
 
 	// Graphics
 	//InitTrianglePipeline();
+	//InitCubeMapPipeline();
 	InitMeshPipeline();
 
 	MetalRoughMaterial.BuildPipelines(this);
@@ -575,7 +582,7 @@ void VulkanEngine::InitBackgroundPipelines()
 	VkPipelineLayoutCreateInfo computeLayout{};
 	computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	computeLayout.pNext = nullptr;
-	computeLayout.pSetLayouts = &DrawImageDescriptorLayout;
+	computeLayout.pSetLayouts = &m_DrawImageDescriptorLayout;
 	computeLayout.setLayoutCount = 1;
 
 	VkPushConstantRange	pushConstant{};
@@ -691,14 +698,14 @@ void VulkanEngine::InitTrianglePipeline()
 
 void VulkanEngine::InitMeshPipeline()
 {
-	VkShaderModule triangleFragShader;
-	VkShaderModule triangleVertexShader;
+	VkShaderModule fragShader;
+	VkShaderModule vertexShader;
 
-	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.frag.spv", Device, &triangleFragShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.frag.spv", Device, &fragShader))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when building tex_image frag shader\n");
 	}
-	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.vert.spv", Device, &triangleVertexShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.vert.spv", Device, &vertexShader))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when building colored_triangle vert shader\n");
 	}
@@ -717,7 +724,7 @@ void VulkanEngine::InitMeshPipeline()
 
 	PipelineBuilder pipelineBuilder;
 	pipelineBuilder.PipelineLayout = m_MeshPipelineLayout;
-	pipelineBuilder.SetShaders(triangleVertexShader, triangleFragShader);
+	pipelineBuilder.SetShaders(vertexShader, fragShader);
 	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
 	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
@@ -731,8 +738,8 @@ void VulkanEngine::InitMeshPipeline()
 	pipelineBuilder.SetDepthFormat(DepthImage.ImageFormat);
 	m_MeshPipeline = pipelineBuilder.BuildPipeline(Device);
 
-	vkDestroyShaderModule(Device, triangleFragShader, nullptr);
-	vkDestroyShaderModule(Device, triangleVertexShader, nullptr);
+	vkDestroyShaderModule(Device, fragShader, nullptr);
+	vkDestroyShaderModule(Device, vertexShader, nullptr);
 
 	m_MainDeletionQueue.PushFunction([&]() {
 		vkDestroyPipelineLayout(Device, m_MeshPipelineLayout, nullptr);
@@ -782,13 +789,13 @@ void VulkanEngine::InitDefaultData()
 	// Default textures to fallback to if a texture is not provided in the pipeline
 	uint32_t black = glm::packUnorm4x8(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
 	uint32_t white = glm::packUnorm4x8(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-	WhiteImage = CreateImage((void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	WhiteImage = UploadImage((void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 	uint32_t purple = glm::packUnorm4x8(glm::vec4(0.5f, 0.5f, 1.0f, 1.0f));
-	PurpleImage = CreateImage((void*)&purple, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	PurpleImage = UploadImage((void*)&purple, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	//uint32_t grey = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 0.66f));
-	//m_GreyImage = CreateImage((void*)&grey, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-	//m_BlackImage = CreateImage((void*)&black, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	//m_GreyImage = UploadImage((void*)&grey, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	//m_BlackImage = UploadImage((void*)&black, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	// Checkerboard image
 	uint32_t magenta = glm::packUnorm4x8(glm::vec4(1.0f, 0.0f, 1.0f, 1.0f));
@@ -801,7 +808,7 @@ void VulkanEngine::InitDefaultData()
 		}
 	}
 	
-	ErrorCheckerboardImage = CreateImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	ErrorCheckerboardImage = UploadImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 	
 	VkSamplerCreateInfo sampler = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 	sampler.magFilter = VK_FILTER_NEAREST;
@@ -811,9 +818,24 @@ void VulkanEngine::InitDefaultData()
 	sampler.minFilter = VK_FILTER_LINEAR;
 	vkCreateSampler(Device, &sampler, nullptr, &DefaultSamplerLinear);
 
+	std::string structurePath = { ASSET_PATH "Sponza/Sponza.gltf" };
+	auto structureFile = loadGltfScene(this, structurePath);
+	assert(structureFile.has_value());
+	m_LoadedScenes["structure"] = *structureFile;
+
+	// Upload cubemap stuff
+	if (!VkUtils::loadCubeMap(this, ASSET_PATH "cubemaps/cubemap_yokohama_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when trying to load cubemap\n");
+		glfwSetWindowShouldClose(m_Window, GLFW_TRUE);
+	}
+
 	m_MainDeletionQueue.PushFunction([&]() {
 		vkDestroySampler(Device, m_DefaultSamplerNearest, nullptr),
 		vkDestroySampler(Device, DefaultSamplerLinear, nullptr),
+
+		vkDestroySampler(Device, CubeMapSampler, nullptr);
+		DestroyImage(CubeMap);
 
 		DestroyImage(WhiteImage);
 		DestroyImage(PurpleImage);
@@ -821,25 +843,71 @@ void VulkanEngine::InitDefaultData()
 		//DestroyImage(m_BlackImage);
 		DestroyImage(ErrorCheckerboardImage);
 		});
+}
 
-	std::string structurePath = { ASSET_PATH "Sponza/Sponza.gltf" };
-	auto structureFile = loadGltfScene(this, structurePath);
-	assert(structureFile.has_value());
-	m_LoadedScenes["structure"] = *structureFile;
+void VulkanEngine::InitCubeMapPipeline()
+{
+	VkShaderModule fragShader;
+	VkShaderModule vertexShader;
+
+	if (!VkUtils::loadShaderModule(SHADER_PATH "cubemap.frag.spv", Device, &fragShader))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when building cubemap frag shader\n");
+	}
+	if (!VkUtils::loadShaderModule(SHADER_PATH "cubemap.vert.spv", Device, &vertexShader))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when building cubemap vert shader\n");
+	}
+
+	VkPushConstantRange bufferRange{};
+	bufferRange.offset = 0;
+	bufferRange.size = sizeof(GPUDrawPushConstants);
+	bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = VkInit::pipelineLayoutCreateInfo();
+	pipelineLayoutInfo.pPushConstantRanges = &bufferRange;
+	pipelineLayoutInfo.pushConstantRangeCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &m_SingleImageDescriptorLayout;
+	pipelineLayoutInfo.setLayoutCount = 1;
+	VK_CHECK(vkCreatePipelineLayout(Device, &pipelineLayoutInfo, nullptr, &m_MeshPipelineLayout));
+
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.PipelineLayout = m_MeshPipelineLayout;
+	pipelineBuilder.SetShaders(vertexShader, fragShader);
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.SetMultiSamplingNone();
+	pipelineBuilder.DisableBlending();
+	//pipelineBuilder.EnableBlendingAdditive();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	//pipelineBuilder.DisableDepthTest();
+
+	pipelineBuilder.SetColorAttachmentFormat(DrawImage.ImageFormat);
+	pipelineBuilder.SetDepthFormat(DepthImage.ImageFormat);
+	m_MeshPipeline = pipelineBuilder.BuildPipeline(Device);
+
+	vkDestroyShaderModule(Device, fragShader, nullptr);
+	vkDestroyShaderModule(Device, vertexShader, nullptr);
+
+	m_MainDeletionQueue.PushFunction([&]() {
+		vkDestroyPipelineLayout(Device, m_MeshPipelineLayout, nullptr);
+		vkDestroyPipeline(Device, m_MeshPipeline, nullptr);
+		});
 }
 
 void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
 {
-	VkShaderModule meshFragShader;
-	if (!VkUtils::loadShaderModule(SHADER_PATH "scene.frag.spv", engine->Device, &meshFragShader))
-	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building the triangle fragment shader module\n");
-	}
+	VkShaderModule fragShader;
+	VkShaderModule vertexShader;
 
-	VkShaderModule meshVertexShader;
-	if (!VkUtils::loadShaderModule(SHADER_PATH "scene.vert.spv", engine->Device, &meshVertexShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "scene.frag.spv", engine->Device, &fragShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building the triangle vertex shader module\n");
+		fmt::print(fmt::fg(fmt::color::red), "Error when building the scene fragment shader\n");
+	}
+	if (!VkUtils::loadShaderModule(SHADER_PATH "scene.vert.spv", engine->Device, &vertexShader))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when building the scene vertex shader\n");
 	}
 
 	VkPushConstantRange matrixRange{};
@@ -873,7 +941,7 @@ void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
 	// build the stage-create-info for both vertex and fragment stages. This lets
 	// the pipeline know the shader modules per stage
 	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.SetShaders(meshVertexShader, meshFragShader);
+	pipelineBuilder.SetShaders(vertexShader, fragShader);
 	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
 	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
@@ -898,8 +966,8 @@ void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
 
 	TransparentPipeline.Pipeline = pipelineBuilder.BuildPipeline(engine->Device);
 
-	vkDestroyShaderModule(engine->Device, meshFragShader, nullptr);
-	vkDestroyShaderModule(engine->Device, meshVertexShader, nullptr);
+	vkDestroyShaderModule(engine->Device, fragShader, nullptr);
+	vkDestroyShaderModule(engine->Device, vertexShader, nullptr);
 }
 
 void GLTFMetallic_Roughness::ClearResources(VkDevice device)
@@ -1011,14 +1079,14 @@ void VulkanEngine::DrawMain(VkCommandBuffer& cmd)
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, effect.Pipeline);
 
 	// bind the descriptor set containing the draw image for the compute pipeline
-	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_GradientPipelineLayout, 0, 1, &DrawImageDescriptors, 0, nullptr);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_GradientPipelineLayout, 0, 1, &m_DrawImageDescriptors, 0, nullptr);
 
 	vkCmdPushConstants(cmd, m_GradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.Data);
 	// execute the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
 	vkCmdDispatch(cmd, std::ceil(m_DrawExtent.width / 16.0f), std::ceil(m_DrawExtent.height / 16.0f), 1);
 
 	////////////////////////////////////////////////
-	
+
 	VkUtils::transitionImage(cmd, DrawImage.Image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	VkRenderingAttachmentInfo colorAttachment = VkInit::attachmentInfo(DrawImage.ImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	VkRenderingAttachmentInfo depthAttachment = VkInit::depthAttachmentInfo(DepthImage.ImageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
@@ -1083,6 +1151,7 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
 	DescriptorWriter writer;
 	writer.WriteBuffer(0, gpuSceneDataBuffer.Buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	writer.WriteBuffer(1, lightDataBuffer.Buffer, sizeof(LightData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	//writer.WriteImage(2, CubeMap.ImageView, CubeMapSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	writer.UpdateSet(Device, sceneDescriptor);
 
 	// Defined outside of the draw function, this is the state we will try to skip
@@ -1323,7 +1392,7 @@ AllocatedImage VulkanEngine::CreateImage(VkExtent3D size, VkFormat format, VkIma
 	return newImage;
 }
 
-AllocatedImage VulkanEngine::CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped)
+AllocatedImage VulkanEngine::UploadImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped)
 {
 	// RGBA = 4 channels so multiplied by 4 to get 4 bytes cuz VK_FORMAT_R8G8B8A8_UNORM
 	size_t dataSize = size.depth * size.width * size.height * 4;
@@ -1358,6 +1427,64 @@ AllocatedImage VulkanEngine::CreateImage(void* data, VkExtent3D size, VkFormat f
 			VkUtils::transitionImage(cmd, newImage.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,	VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		}
 	});
+
+	DestroyBuffer(uploadBuffer);
+	return newImage;
+}
+
+AllocatedImage VulkanEngine::CreateCubeMapImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mipMapLevels)
+{
+	AllocatedImage newImage;
+	newImage.ImageFormat = format;
+	newImage.ImageExtent = size;
+
+	VkImageCreateInfo imageInfo = VkInit::imageCreateInfo(format, usage, size);
+	imageInfo.mipLevels = mipMapLevels;
+	imageInfo.arrayLayers = 6;
+	imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+
+	// Allocate memory on GPU
+	VmaAllocationCreateInfo allocInfo = {};
+	allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+	allocInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	VK_CHECK(vmaCreateImage(m_Allocator, &imageInfo, &allocInfo, &newImage.Image, &newImage.Allocation, nullptr));
+
+	// if the format is a depth format, we will need to have it use the correct aspect flag
+	VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
+	if (format == VK_FORMAT_D32_SFLOAT)
+	{
+		aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
+	}
+
+	VkImageViewCreateInfo viewInfo = VkInit::imageviewCreateInfo(format, newImage.Image, aspectFlag);
+	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+	viewInfo.subresourceRange.layerCount = 6;
+	viewInfo.subresourceRange.levelCount = imageInfo.mipLevels;
+	VK_CHECK(vkCreateImageView(Device, &viewInfo, nullptr, &newImage.ImageView));
+
+	return newImage;
+}
+
+AllocatedImage VulkanEngine::UploadCubeMapImage(void* data, const std::span<VkBufferImageCopy> bufferCopyRegions,
+	VkExtent3D size, VkFormat format, VkImageUsageFlags usage,	uint32_t mipMapLevels, size_t dataSize)
+{
+	AllocatedBuffer uploadBuffer = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	memcpy(uploadBuffer.Info.pMappedData, data, dataSize);
+
+	AllocatedImage newImage = CreateCubeMapImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipMapLevels);
+
+	ImmediateSubmit([&](VkCommandBuffer cmd)
+		{
+			VkUtils::transitionImage(cmd, newImage.Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+				mipMapLevels, 6);
+
+			vkCmdCopyBufferToImage(cmd, uploadBuffer.Buffer, newImage.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				static_cast<uint32_t>(bufferCopyRegions.size()), bufferCopyRegions.data());
+			{
+				VkUtils::transitionImage(cmd, newImage.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			}
+		});
 
 	DestroyBuffer(uploadBuffer);
 	return newImage;

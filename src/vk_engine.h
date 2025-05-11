@@ -64,11 +64,13 @@ public:
 	VkDevice Device;
 	AllocatedImage DrawImage;
 	AllocatedImage DepthImage;
-	VkDescriptorSetLayout GPUSceneDataDescriptorLayout;
 	AllocatedImage ErrorCheckerboardImage;
-	VkSampler DefaultSamplerLinear;
 	AllocatedImage WhiteImage;
 	AllocatedImage PurpleImage;
+	AllocatedImage CubeMap;
+	VkSampler CubeMapSampler;
+	VkDescriptorSetLayout GPUSceneDataDescriptorLayout;
+	VkSampler DefaultSamplerLinear;
 	GLTFMetallic_Roughness MetalRoughMaterial;
 
 private:
@@ -116,8 +118,8 @@ private:
 	std::vector<VkImage> m_SwapchainImages;
 	std::vector<VkImageView> m_SwapchainImageViews;
 	VkExtent2D m_SwapchainExtent;
-	VkDescriptorSet DrawImageDescriptors;
-	VkDescriptorSetLayout DrawImageDescriptorLayout;
+	VkDescriptorSet m_DrawImageDescriptors;
+	VkDescriptorSetLayout m_DrawImageDescriptorLayout;
 	VkFence m_ImmediateFence;
 	VkCommandBuffer m_ImmediateCommandBuffer;
 	VkCommandPool m_ImmediateCommandPool;
@@ -140,7 +142,10 @@ public:
 	GPUMeshBuffers UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 	void DestroyBuffer(const AllocatedBuffer& buffer);
-	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage UploadImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage CreateCubeMapImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mipMapLevels);
+	AllocatedImage UploadCubeMapImage(void* data, const std::span<VkBufferImageCopy> bufferCopyRegions, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mapMapLevels, size_t dataSize);
 	void DestroyImage(const AllocatedImage& image);
 
 private:
@@ -153,6 +158,7 @@ private:
 	void InitPipelines();
 	void InitBackgroundPipelines();
 	void InitTrianglePipeline();
+	void InitCubeMapPipeline();
 	void InitMeshPipeline();
 	void InitDefaultData();
 
@@ -164,6 +170,5 @@ private:
 	void DrawGeometry(VkCommandBuffer& cmd);
 	void DrawMesh(VkCommandBuffer& cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
-	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	void UpdateScene();
 };

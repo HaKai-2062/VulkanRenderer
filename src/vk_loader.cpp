@@ -72,7 +72,7 @@ std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& a
 				imagesize.height = height;
 				imagesize.depth = 1;
 
-				newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+				newImage = engine->UploadImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 
 				stbi_image_free(data);
 			}
@@ -88,7 +88,7 @@ std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& a
 				imagesize.height = height;
 				imagesize.depth = 1;
 
-				newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+				newImage = engine->UploadImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 
 				stbi_image_free(data);
 			}
@@ -104,7 +104,7 @@ std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& a
 				imagesize.height = height;
 				imagesize.depth = 1;
 
-				newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+				newImage = engine->UploadImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 
 				stbi_image_free(data);
 			}
@@ -132,7 +132,7 @@ std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& a
 						imagesize.height = height;
 						imagesize.depth = 1;
 
-						newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, 
+						newImage = engine->UploadImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM,
 							VK_IMAGE_USAGE_SAMPLED_BIT, true);
 
 						stbi_image_free(data);
