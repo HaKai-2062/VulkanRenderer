@@ -118,16 +118,14 @@ private:
 	std::vector<VkImage> m_SwapchainImages;
 	std::vector<VkImageView> m_SwapchainImageViews;
 	VkExtent2D m_SwapchainExtent;
-	VkDescriptorSet m_DrawImageDescriptors;
-	VkDescriptorSetLayout m_DrawImageDescriptorLayout;
+	VkDescriptorSet m_CubeMapDescriptors;
+	VkDescriptorSetLayout m_CubeMapDescriptorLayout;
 	VkFence m_ImmediateFence;
 	VkCommandBuffer m_ImmediateCommandBuffer;
 	VkCommandPool m_ImmediateCommandPool;
 
-	VkPipeline m_GradientPipeline;
-	VkPipelineLayout m_GradientPipelineLayout;
-	VkPipeline m_TrianglePipeline;
-	VkPipelineLayout m_TrianglePipelineLayout;
+	VkPipeline m_CubeMapPipeline;
+	VkPipelineLayout m_CubeMapPipelineLayout;
 	VkPipeline m_MeshPipeline;
 	VkPipelineLayout m_MeshPipelineLayout;
 
@@ -156,8 +154,6 @@ private:
 	void InitDescriptors();
 	void InitImGui();
 	void InitPipelines();
-	void InitBackgroundPipelines();
-	void InitTrianglePipeline();
 	void InitCubeMapPipeline();
 	void InitMeshPipeline();
 	void InitDefaultData();
@@ -166,9 +162,10 @@ private:
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
 	void ResizeSwapchain();
-	void DrawMain(VkCommandBuffer& cmd);
-	void DrawGeometry(VkCommandBuffer& cmd);
-	void DrawMesh(VkCommandBuffer& cmd);
+	void DrawMain(VkCommandBuffer cmd);
+	void DrawGeometry(VkCommandBuffer cmd);
+	void DrawMesh(VkCommandBuffer cmd);
+	void DrawCubeMap(VkCommandBuffer cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	void UpdateScene();
 };

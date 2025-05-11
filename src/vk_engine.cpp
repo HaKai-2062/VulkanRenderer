@@ -134,16 +134,6 @@ void VulkanEngine::MainLoop()
 
 			glm::vec3 pos = m_Camera.GetCameraPosition();
 			glm::vec3 rot = m_Camera.GetCameraOrientation();
-			ComputeEffect& selected = m_BGEffects[m_CurrentBGEffect];
-
-			ImGui::Text("Selected effect: ", selected.Name);
-			ImGui::SliderInt("Effect Index", &m_CurrentBGEffect, 0, m_BGEffects.size() - 1);
-			ImGui::ColorEdit4("data1", (float*)&selected.Data.Data1);
-			ImGui::ColorEdit4("data2", (float*)&selected.Data.Data2);
-			ImGui::ColorEdit4("data3", (float*)&selected.Data.Data3);
-			ImGui::ColorEdit4("data4", (float*)&selected.Data.Data4);
-
-			ImGui::NewLine();
 
 			ImGui::Text("Frametime:   %f ms", Stats.FrameTime);
 			ImGui::Text("Draw Time:   %f ms", Stats.MeshDrawTime);
@@ -198,7 +188,7 @@ void VulkanEngine::DrawFrame()
 	VkCommandBufferBeginInfo cmdBeginInfo = VkInit::commandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
-	VkUtils::transitionImage(cmd, DrawImage.Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	VkUtils::transitionImage(cmd, DrawImage.Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	VkUtils::transitionImage(cmd, DepthImage.Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 	DrawMain(cmd);
 
@@ -505,12 +495,6 @@ void VulkanEngine::InitDescriptors()
 
 	m_GlobalDescriptorAllocator.Init(Device, 10, sizes);
 
-	// Set to send compute shader data
-	{
-		DescriptorLayoutBuilder builder;
-		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		m_DrawImageDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_COMPUTE_BIT);
-	}
 	// Set to send scene, light and cubemap data to GPU
 	{
 		DescriptorLayoutBuilder builder;
@@ -527,23 +511,34 @@ void VulkanEngine::InitDescriptors()
 
 	// Set to send cubemap data to GPU
 	{
-		//DescriptorLayoutBuilder builder;
-		//builder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		DescriptorLayoutBuilder builder;
+		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		m_CubeMapDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
-	//allocate a descriptor set for our draw image
-	m_DrawImageDescriptors = m_GlobalDescriptorAllocator.Allocate(Device, m_DrawImageDescriptorLayout);
+	// Upload cubemap stuff
+	if (!VkUtils::loadCubeMap(this, ASSET_PATH "cubemaps/cubemap_yokohama_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when trying to load cubemap\n");
+		glfwSetWindowShouldClose(m_Window, GLFW_TRUE);
+	}
+
+	// Allocate a descriptor set for our cubemap draw image and it is only sent once here
+	m_CubeMapDescriptors = m_GlobalDescriptorAllocator.Allocate(Device, m_CubeMapDescriptorLayout);
 
 	DescriptorWriter writer;
-	writer.WriteImage(0, DrawImage.ImageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-	writer.UpdateSet(Device, m_DrawImageDescriptors);
+	writer.WriteImage(0, CubeMap.ImageView, CubeMapSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.UpdateSet(Device, m_CubeMapDescriptors);
 
 	//make sure both the descriptor allocator and the new layout get cleaned up properly
 	m_MainDeletionQueue.PushFunction([&]() {
 		m_GlobalDescriptorAllocator.DestroyPools(Device);
-		vkDestroyDescriptorSetLayout(Device, m_DrawImageDescriptorLayout, nullptr);
 		vkDestroyDescriptorSetLayout(Device, GPUSceneDataDescriptorLayout, nullptr);
 		vkDestroyDescriptorSetLayout(Device, m_SingleImageDescriptorLayout, nullptr);
+		vkDestroyDescriptorSetLayout(Device, m_CubeMapDescriptorLayout, nullptr);
+
+		vkDestroySampler(Device, CubeMapSampler, nullptr);
+		DestroyImage(CubeMap);
 	});
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -566,133 +561,62 @@ void VulkanEngine::InitDescriptors()
 
 void VulkanEngine::InitPipelines()
 {
-	// Compute
-	InitBackgroundPipelines();
-
 	// Graphics
-	//InitTrianglePipeline();
-	//InitCubeMapPipeline();
+	InitCubeMapPipeline();
 	InitMeshPipeline();
 
 	MetalRoughMaterial.BuildPipelines(this);
 }
 
-void VulkanEngine::InitBackgroundPipelines()
+void VulkanEngine::InitCubeMapPipeline()
 {
-	VkPipelineLayoutCreateInfo computeLayout{};
-	computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	computeLayout.pNext = nullptr;
-	computeLayout.pSetLayouts = &m_DrawImageDescriptorLayout;
-	computeLayout.setLayoutCount = 1;
+	VkShaderModule fragShader;
+	VkShaderModule vertexShader;
 
-	VkPushConstantRange	pushConstant{};
-	pushConstant.offset = 0;
-	pushConstant.size = sizeof(ComputePushConstants);
-	pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-	computeLayout.pPushConstantRanges = &pushConstant;
-	computeLayout.pushConstantRangeCount = 1;
-
-	VK_CHECK(vkCreatePipelineLayout(Device, &computeLayout, nullptr, &m_GradientPipelineLayout));
-
-	VkShaderModule gradientShader;
-	if (!VkUtils::loadShaderModule(SHADER_PATH "gradient_color.comp.spv", Device, &gradientShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "cubemap.frag.spv", Device, &fragShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building gradient_color compute shader\n");
+		fmt::print(fmt::fg(fmt::color::red), "Error when building cubemap frag shader\n");
 	}
-
-	VkShaderModule skyShader;
-	if (!VkUtils::loadShaderModule(SHADER_PATH "sky.comp.spv", Device, &skyShader))
-	{	
-		fmt::print(fmt::fg(fmt::color::red), "Error when building sky compute shader\n");
-	}
-
-	VkPipelineShaderStageCreateInfo stageinfo{};
-	stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	stageinfo.pNext = nullptr;
-	stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-	stageinfo.module = gradientShader;
-	stageinfo.pName = "main";
-
-	VkComputePipelineCreateInfo computePipelineCreateInfo{};
-	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-	computePipelineCreateInfo.pNext = nullptr;
-	computePipelineCreateInfo.layout = m_GradientPipelineLayout;
-	computePipelineCreateInfo.stage = stageinfo;
-
-	ComputeEffect gradient;
-	gradient.Layout = m_GradientPipelineLayout;
-	gradient.Name = "gradient";
-	gradient.Data = {};
-	gradient.Data.Data1 = glm::vec4(1, 0, 0, 1);
-	gradient.Data.Data2 = glm::vec4(0, 0, 1, 1);
-
-	VK_CHECK(vkCreateComputePipelines(Device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &gradient.Pipeline));
-
-	//change the shader module only to create the sky shader
-	computePipelineCreateInfo.stage.module = skyShader;
-
-	ComputeEffect sky;
-	sky.Layout = m_GradientPipelineLayout;
-	sky.Name = "sky";
-	sky.Data = {};
-	//default sky parameters
-	sky.Data.Data1 = glm::vec4(0.1, 0.2, 0.4, 0.97);
-
-	VK_CHECK(vkCreateComputePipelines(Device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &sky.Pipeline));
-
-	//add the 2 background effects into the array
-	m_BGEffects.push_back(gradient);
-	m_BGEffects.push_back(sky);
-
-	//destroy structures properly
-	vkDestroyShaderModule(Device, gradientShader, nullptr);
-	vkDestroyShaderModule(Device, skyShader, nullptr);
-	m_MainDeletionQueue.PushFunction([=]()
-		{
-			vkDestroyPipelineLayout(Device, m_GradientPipelineLayout, nullptr);
-			vkDestroyPipeline(Device, sky.Pipeline, nullptr);
-			vkDestroyPipeline(Device, gradient.Pipeline, nullptr);
-		});
-}
-
-void VulkanEngine::InitTrianglePipeline()
-{
-	VkShaderModule triangleFragShader;
-	VkShaderModule triangleVertexShader;
-
-	if (!VkUtils::loadShaderModule(SHADER_PATH "colored_triangle.frag.spv", Device, &triangleFragShader))
+	if (!VkUtils::loadShaderModule(SHADER_PATH "cubemap.vert.spv", Device, &vertexShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building colored_triangle frag shader\n");
+		fmt::print(fmt::fg(fmt::color::red), "Error when building cubemap vert shader\n");
 	}
-	if (!VkUtils::loadShaderModule(SHADER_PATH "colored_triangle.vert.spv", Device, &triangleVertexShader))
-	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building colored_triangle vert shader\n");
-	}
+
+	VkPushConstantRange bufferRange{};
+	bufferRange.offset = 0;
+	bufferRange.size = sizeof(GPUDrawPushConstants);
+	bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = VkInit::pipelineLayoutCreateInfo();
-	VK_CHECK(vkCreatePipelineLayout(Device, &pipelineLayoutInfo, nullptr, &m_TrianglePipelineLayout));
+	pipelineLayoutInfo.pPushConstantRanges = &bufferRange;
+	pipelineLayoutInfo.pushConstantRangeCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &m_CubeMapDescriptorLayout;
+	pipelineLayoutInfo.setLayoutCount = 1;
+	VK_CHECK(vkCreatePipelineLayout(Device, &pipelineLayoutInfo, nullptr, &m_CubeMapPipelineLayout));
 
 	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.PipelineLayout = m_TrianglePipelineLayout;
-	pipelineBuilder.SetShaders(triangleVertexShader, triangleFragShader);
+	pipelineBuilder.PipelineLayout = m_CubeMapPipelineLayout;
+	pipelineBuilder.SetShaders(vertexShader, fragShader);
 	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
 	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 	pipelineBuilder.SetMultiSamplingNone();
 	pipelineBuilder.DisableBlending();
+	//pipelineBuilder.EnableBlendingAdditive();
+	//pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 	pipelineBuilder.DisableDepthTest();
 
-	pipelineBuilder.SetColorAttachmentFormat(DrawImage.ImageFormat);
-	pipelineBuilder.SetDepthFormat(DepthImage.ImageFormat);
-	m_TrianglePipeline = pipelineBuilder.BuildPipeline(Device);
+	//pipelineBuilder.SetColorAttachmentFormat(CubeMap.ImageFormat);
+	// Depth format is necessary because in our draw we require it
+	pipelineBuilder.SetDepthFormat(VK_FORMAT_D32_SFLOAT);
+	m_CubeMapPipeline = pipelineBuilder.BuildPipeline(Device);
 
-	vkDestroyShaderModule(Device, triangleFragShader, nullptr);
-	vkDestroyShaderModule(Device, triangleVertexShader, nullptr);
+	vkDestroyShaderModule(Device, fragShader, nullptr);
+	vkDestroyShaderModule(Device, vertexShader, nullptr);
 
 	m_MainDeletionQueue.PushFunction([&]() {
-		vkDestroyPipelineLayout(Device, m_TrianglePipelineLayout, nullptr);
-		vkDestroyPipeline(Device, m_TrianglePipeline, nullptr);
+		vkDestroyPipelineLayout(Device, m_CubeMapPipelineLayout, nullptr);
+		vkDestroyPipeline(Device, m_CubeMapPipeline, nullptr);
 		});
 }
 
@@ -823,76 +747,15 @@ void VulkanEngine::InitDefaultData()
 	assert(structureFile.has_value());
 	m_LoadedScenes["structure"] = *structureFile;
 
-	// Upload cubemap stuff
-	if (!VkUtils::loadCubeMap(this, ASSET_PATH "cubemaps/cubemap_yokohama_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM))
-	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when trying to load cubemap\n");
-		glfwSetWindowShouldClose(m_Window, GLFW_TRUE);
-	}
-
 	m_MainDeletionQueue.PushFunction([&]() {
 		vkDestroySampler(Device, m_DefaultSamplerNearest, nullptr),
 		vkDestroySampler(Device, DefaultSamplerLinear, nullptr),
-
-		vkDestroySampler(Device, CubeMapSampler, nullptr);
-		DestroyImage(CubeMap);
 
 		DestroyImage(WhiteImage);
 		DestroyImage(PurpleImage);
 		//DestroyImage(m_GreyImage);
 		//DestroyImage(m_BlackImage);
 		DestroyImage(ErrorCheckerboardImage);
-		});
-}
-
-void VulkanEngine::InitCubeMapPipeline()
-{
-	VkShaderModule fragShader;
-	VkShaderModule vertexShader;
-
-	if (!VkUtils::loadShaderModule(SHADER_PATH "cubemap.frag.spv", Device, &fragShader))
-	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building cubemap frag shader\n");
-	}
-	if (!VkUtils::loadShaderModule(SHADER_PATH "cubemap.vert.spv", Device, &vertexShader))
-	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building cubemap vert shader\n");
-	}
-
-	VkPushConstantRange bufferRange{};
-	bufferRange.offset = 0;
-	bufferRange.size = sizeof(GPUDrawPushConstants);
-	bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo = VkInit::pipelineLayoutCreateInfo();
-	pipelineLayoutInfo.pPushConstantRanges = &bufferRange;
-	pipelineLayoutInfo.pushConstantRangeCount = 1;
-	pipelineLayoutInfo.pSetLayouts = &m_SingleImageDescriptorLayout;
-	pipelineLayoutInfo.setLayoutCount = 1;
-	VK_CHECK(vkCreatePipelineLayout(Device, &pipelineLayoutInfo, nullptr, &m_MeshPipelineLayout));
-
-	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.PipelineLayout = m_MeshPipelineLayout;
-	pipelineBuilder.SetShaders(vertexShader, fragShader);
-	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-	pipelineBuilder.SetMultiSamplingNone();
-	pipelineBuilder.DisableBlending();
-	//pipelineBuilder.EnableBlendingAdditive();
-	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-	//pipelineBuilder.DisableDepthTest();
-
-	pipelineBuilder.SetColorAttachmentFormat(DrawImage.ImageFormat);
-	pipelineBuilder.SetDepthFormat(DepthImage.ImageFormat);
-	m_MeshPipeline = pipelineBuilder.BuildPipeline(Device);
-
-	vkDestroyShaderModule(Device, fragShader, nullptr);
-	vkDestroyShaderModule(Device, vertexShader, nullptr);
-
-	m_MainDeletionQueue.PushFunction([&]() {
-		vkDestroyPipelineLayout(Device, m_MeshPipelineLayout, nullptr);
-		vkDestroyPipeline(Device, m_MeshPipeline, nullptr);
 		});
 }
 
@@ -1051,7 +914,7 @@ void VulkanEngine::ResizeSwapchain()
 	m_ResizeRequested = false;
 }
 
-void VulkanEngine::DrawMesh(VkCommandBuffer& cmd)
+void VulkanEngine::DrawMesh(VkCommandBuffer cmd)
 {
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
 	
@@ -1069,25 +932,45 @@ void VulkanEngine::DrawMesh(VkCommandBuffer& cmd)
 	}
 }
 
-void VulkanEngine::DrawMain(VkCommandBuffer& cmd)
+void VulkanEngine::DrawCubeMap(VkCommandBuffer cmd)
+{
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_CubeMapPipeline);
+
+	VkViewport viewport = {};
+	viewport.x = 0;
+	viewport.y = 0;
+	viewport.width = m_DrawExtent.width;
+	viewport.height = m_DrawExtent.height;
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+
+	vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+	VkRect2D scissor = {};
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	scissor.extent.width = m_DrawExtent.width;
+	scissor.extent.height = m_DrawExtent.height;
+
+	vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+	GPUDrawPushConstants pushConstants;
+	glm::mat4 model = glm::identity<glm::mat4>();
+	// We need to remove translation from the view matrix so mat4->mat3->mat4
+	pushConstants.WorldMatrix = m_SceneData.Proj * glm::mat4(glm::mat3(m_SceneData.View)) * model;
+	pushConstants.VertexBufferAddress = m_Cube.VertexDeviceAddress;
+
+	vkCmdPushConstants(cmd, m_CubeMapPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+	vkCmdBindIndexBuffer(cmd, m_Cube.IndexBuffer.Buffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_CubeMapPipelineLayout, 0, 1, &m_CubeMapDescriptors, 0, nullptr);
+
+	vkCmdDrawIndexed(cmd, 36, 1, 0, 0, 0);
+}
+
+void VulkanEngine::DrawMain(VkCommandBuffer cmd)
 {
 	////////////////////////////////////////////////
-
-	ComputeEffect& effect = m_BGEffects[m_CurrentBGEffect];
-
-	// bind the gradient drawing compute pipeline
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, effect.Pipeline);
-
-	// bind the descriptor set containing the draw image for the compute pipeline
-	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_GradientPipelineLayout, 0, 1, &m_DrawImageDescriptors, 0, nullptr);
-
-	vkCmdPushConstants(cmd, m_GradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.Data);
-	// execute the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
-	vkCmdDispatch(cmd, std::ceil(m_DrawExtent.width / 16.0f), std::ceil(m_DrawExtent.height / 16.0f), 1);
-
-	////////////////////////////////////////////////
-
-	VkUtils::transitionImage(cmd, DrawImage.Image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	
 	VkRenderingAttachmentInfo colorAttachment = VkInit::attachmentInfo(DrawImage.ImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	VkRenderingAttachmentInfo depthAttachment = VkInit::depthAttachmentInfo(DepthImage.ImageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 	VkRenderingInfo renderInfo = VkInit::renderingInfo(m_DrawExtent, &colorAttachment, &depthAttachment);
@@ -1095,18 +978,18 @@ void VulkanEngine::DrawMain(VkCommandBuffer& cmd)
 	
 	auto start = std::chrono::system_clock::now();
 
+	DrawCubeMap(cmd);
 	DrawGeometry(cmd);
+	DrawMesh(cmd);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	Stats.MeshDrawTime = elapsed.count() / 1000.0f;
 
-	DrawMesh(cmd);
-
 	vkCmdEndRendering(cmd);
 }
 
-void VulkanEngine::DrawGeometry(VkCommandBuffer& cmd)
+void VulkanEngine::DrawGeometry(VkCommandBuffer cmd)
 {
 	std::vector<uint32_t> opaqueDraws;
 	opaqueDraws.reserve(m_MainDrawContext.OpaqueSurfaces.size());
