@@ -30,7 +30,7 @@ private:
 	glm::vec3 m_Right{ 0.0f };
 	glm::quat m_Orientation{ 1.0f, 0.0f, 0.0f, 0.0f };
 
-	float m_Speed = 20.5f;
+	float m_Speed = 5.0f;
 	float m_Sensitivity = 0.05f;
 	float m_Zoom = 45.0f;
 

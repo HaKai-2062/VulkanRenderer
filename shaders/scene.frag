@@ -73,6 +73,37 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
+
+vec3 calculateLightContribution(vec3 N, vec3 H, vec3 V, vec3 L, vec3 F0, vec3 radiance, vec3 albedo, float roughness, float metallic)
+{
+    float NDF = DistributionGGX(N, H, roughness);
+    // Cook-Torrance BRDF
+    float G   = GeometrySmith(N, V, L, roughness);
+    vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
+       
+    vec3 numerator    = NDF * G * F;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001; // + 0.0001 to prevent divide by zero
+    vec3 specular = numerator / denominator;
+    
+    // kS is equal to Fresnel
+    vec3 kS = F;
+    // for energy conservation, the diffuse and specular light can't
+    // be above 1.0 (unless the surface emits light); to preserve this
+    // relationship the diffuse component (kD) should equal 1.0 - kS.
+    vec3 kD = vec3(1.0) - kS;
+    // multiply kD by the inverse metalness such that only non-metals 
+    // have diffuse lighting, or a linear blend if partly metal (pure metals
+    // have no diffuse light).
+    kD *= 1.0 - metallic;
+
+    // scale light by NdotL
+    float NdotL = max(dot(N, L), 0.0);
+
+    // add to outgoing radiance Lo
+    return (kD * albedo / PI + specular) * radiance * NdotL;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
+}
+
+
 // ----------------------------------------------------------------------------
 void main()
 {
@@ -91,42 +122,51 @@ void main()
 
     // reflectance equation
     vec3 Lo = vec3(0.0);
+
+    // Point lights
     for(int i = 0; i < u_Light.TotalPointLights; ++i)
     {
         PointLight light = u_Light.PointLights[i];
 
-        // calculate per-light radiance
-        vec3 L = normalize(light.Position - v_WorldPos.xyz);
+        vec3 fragToLight = light.Position - v_WorldPos.xyz;
+        vec3 L = normalize(fragToLight);
         vec3 H = normalize(V + L);
-        float distance = length(light.Position - v_WorldPos.xyz);
+        float distance = length(fragToLight);
         float attenuation = 1.0 / (distance * distance);
         vec3 radiance = light.Color * light.Intensity * attenuation;
 
-        float NDF = DistributionGGX(N, H, roughness);
-        // Cook-Torrance BRDF
-        float G   = GeometrySmith(N, V, L, roughness);
-        vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
-           
-        vec3 numerator    = NDF * G * F;
-        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001; // + 0.0001 to prevent divide by zero
-        vec3 specular = numerator / denominator;
-        
-        // kS is equal to Fresnel
-        vec3 kS = F;
-        // for energy conservation, the diffuse and specular light can't
-        // be above 1.0 (unless the surface emits light); to preserve this
-        // relationship the diffuse component (kD) should equal 1.0 - kS.
-        vec3 kD = vec3(1.0) - kS;
-        // multiply kD by the inverse metalness such that only non-metals 
-        // have diffuse lighting, or a linear blend if partly metal (pure metals
-        // have no diffuse light).
-        kD *= 1.0 - metallic;
+        Lo += calculateLightContribution(N, H, V, L, F0, radiance, albedo, roughness, metallic);
+    }
+    // Directional Light
+    {
+        vec3 L = normalize(-vec3(0.0f, -1.0f, 0.2f));   // Light dir
+        vec3 H = normalize(V + L);
+        vec3 radiance = vec3(1.0f); // Light color
+    
+        Lo += calculateLightContribution(N, H, V, L, F0, radiance, albedo, roughness, metallic);
+    }
+    // Spotlight
+    {
+        vec3 spotLightPos = u_SceneData.CameraPos.xyz;
+        vec3 spotLightDir = normalize(-vec3(u_SceneData.View[0][2], u_SceneData.View[1][2], u_SceneData.View[2][2]));
+        vec3 spotLightColor = vec3(1.0f);
+        float spotInnerCutoff = 0.86;   // (30 deg)
+        float spotOuterCutoff = 0.5;    // (60 deg)
+        float range = 10.0f;
 
-        // scale light by NdotL
-        float NdotL = max(dot(N, L), 0.0);
+        vec3 fragToLight = spotLightPos - v_WorldPos.xyz;
+        vec3 L = normalize(fragToLight);
+        vec3 H = normalize(V + L);
+        float distance = length(fragToLight);
+        float attenuation = range / (distance * distance);
 
-        // add to outgoing radiance Lo
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
+        // Spotlight intensity (smoothstep between inner and outer cone)
+        float theta = dot(L, normalize(-spotLightDir));
+        float epsilon = spotInnerCutoff - spotOuterCutoff;
+        float intensity = clamp((theta - spotOuterCutoff) / epsilon, 0.0, 1.0);
+        vec3 radiance = spotLightColor * attenuation * intensity;
+
+        Lo += calculateLightContribution(N, H, V, L, F0, radiance, albedo, roughness, metallic);
     }
 
     // ambient lighting (note that the next IBL tutorial will replace 
