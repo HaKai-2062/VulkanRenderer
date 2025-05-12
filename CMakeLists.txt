@@ -15,9 +15,13 @@ else()
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 endif()
 
+if (MSVC)
+    add_compile_options(/EHsc)
+endif()
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DVK_PROTOTYPES")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVK_PROTOTYPES")
 #set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE) #link time optimization
+
 
 project ("VulkanRenderer")
 
@@ -76,7 +80,11 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert"
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp"
     )
-source_group("Shader Files" FILES ${GLSL_SOURCE_FILES})
+file(GLOB_RECURSE GLSL_EXTRA_FILES CONFIGURE_DEPENDS 
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.glsl"
+)
+source_group("Shader Files" FILES ${GLSL_SOURCE_FILES} ${GLSL_EXTRA_FILES})
+
 file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
@@ -86,14 +94,13 @@ file(GLOB_RECURSE MY_HEADERS CONFIGURE_DEPENDS
 )
 source_group("Header Files" FILES ${MY_HEADERS})
 
-add_executable("${CMAKE_PROJECT_NAME}" ${MY_SOURCES} ${MY_HEADERS} ${GLSL_SOURCE_FILES})
+add_executable("${CMAKE_PROJECT_NAME}" ${MY_SOURCES} ${MY_HEADERS} ${GLSL_SOURCE_FILES} ${GLSL_EXTRA_FILES})
 set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY CXX_STANDARD 20)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT "${CMAKE_PROJECT_NAME}")
 
 if(MSVC) # If using the VS compiler...
 
 	set_target_properties(${BUILD_TARGET} PROPERTIES LINK_FLAGS "/PROFILE") # for profiling
-    add_compile_options(/EHsc)
 
 	#target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC _CRT_SECURE_NO_WARNINGS)		# secure function warnings
 	#set_target_properties("${CMAKE_PROJECT_NAME}" PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup") #no console
@@ -106,7 +113,7 @@ find_program(GLSL_VALIDATOR glslangValidator REQUIRED HINTS /usr/bin /usr/local/
 
 target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC 
 GLFW_INCLUDE_NONE=1
-SHADER_PATH="${CMAKE_SOURCE_DIR}/shaders/"
+SHADER_PATH="${CMAKE_SOURCE_DIR}/shaders/spirv/"
 ASSET_PATH="${CMAKE_SOURCE_DIR}/assets/"
 )
 
@@ -140,7 +147,7 @@ ${Vulkan_LIBRARIES})
 foreach(GLSL ${GLSL_SOURCE_FILES})
   message(STATUS "BUILDING SHADER")
   get_filename_component(FILE_NAME ${GLSL} NAME)
-  set(SPIRV "${PROJECT_SOURCE_DIR}/shaders/${FILE_NAME}.spv")
+  set(SPIRV "${PROJECT_SOURCE_DIR}/shaders/spirv/${FILE_NAME}.spv")
   message(STATUS ${GLSL})
   message(STATUS COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV})
   add_custom_command(

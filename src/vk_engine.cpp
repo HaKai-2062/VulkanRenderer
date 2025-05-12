@@ -1399,7 +1399,8 @@ void VulkanEngine::UpdateScene()
 	m_SceneData.Time = glfwGetTime();
 
 	float lightSpeed = 1.0f;
-	std::vector<glm::vec3> lightLocations = { glm::vec3(-8.0f, 8.5f, 0.0f), glm::vec3(33.0f, 8.5f, 0.0f) };
+	std::vector<glm::vec3> lightLocations = {  };
+	//std::vector<glm::vec3> lightLocations = { glm::vec3(-8.0f, 8.5f, 0.0f), glm::vec3(33.0f, 8.5f, 0.0f) };
 	for (uint32_t i = 0; i < lightLocations.size(); i++)
 	{
 		PointLight light = {};
