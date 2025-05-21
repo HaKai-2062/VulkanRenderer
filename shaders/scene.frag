@@ -126,22 +126,27 @@ void main()
     // Point lights
     for(int i = 0; i < u_Light.TotalPointLights; ++i)
     {
-        PointLight light = u_Light.PointLights[i];
+        Point pointLight = u_Light.PointLights[i];
 
-        vec3 fragToLight = light.Position - v_WorldPos.xyz;
-        vec3 L = normalize(fragToLight);
-        vec3 H = normalize(V + L);
-        float distance = length(fragToLight);
-        float attenuation = 1.0 / (distance * distance);
-        vec3 radiance = light.Color * light.Intensity * attenuation;
-
-        Lo += calculateLightContribution(N, H, V, L, F0, radiance, albedo, roughness, metallic);
+        if (pointLight.Intensity > 0.01f)
+        {
+            vec3 fragToLight = pointLight.Position - v_WorldPos.xyz;
+            vec3 L = normalize(fragToLight);
+            vec3 H = normalize(V + L);
+            float distance = length(fragToLight);
+            float attenuation = 1.0 / (distance * distance);
+            vec3 radiance = pointLight.Color * pointLight.Intensity * attenuation;
+    
+            Lo += calculateLightContribution(N, H, V, L, F0, radiance, albedo, roughness, metallic);
+        }
     }
     // Directional Light
+    Directional dirLight = u_Light.DirectionalLight;
+    if (dirLight.Intensity > 0.01f)
     {
-        vec3 L = normalize(-vec3(0.0f, -1.0f, 0.2f));   // Light dir
+        vec3 L = dirLight.Direction; // Normalize it before passing
         vec3 H = normalize(V + L);
-        vec3 radiance = vec3(1.0f); // Light color
+        vec3 radiance = dirLight.Color * dirLight.Intensity;
     
         Lo += calculateLightContribution(N, H, V, L, F0, radiance, albedo, roughness, metallic);
     }
@@ -153,32 +158,32 @@ void main()
         float spotInnerCutoff = 0.86;   // (30 deg)
         float spotOuterCutoff = 0.5;    // (60 deg)
         float range = 10.0f;
-
+    
         vec3 fragToLight = spotLightPos - v_WorldPos.xyz;
         vec3 L = normalize(fragToLight);
         vec3 H = normalize(V + L);
         float distance = length(fragToLight);
         float attenuation = range / (distance * distance);
-
+    
         // Spotlight intensity (smoothstep between inner and outer cone)
         float theta = dot(L, normalize(-spotLightDir));
         float epsilon = spotInnerCutoff - spotOuterCutoff;
         float intensity = clamp((theta - spotOuterCutoff) / epsilon, 0.0, 1.0);
         vec3 radiance = spotLightColor * attenuation * intensity;
-
+    
         Lo += calculateLightContribution(N, H, V, L, F0, radiance, albedo, roughness, metallic);
     }
-
+    
     // ambient lighting (note that the next IBL tutorial will replace 
     // this ambient lighting with environment lighting).
-    vec3 ambient = vec3(0.03) * albedo * ao;
+    vec3 ambient = u_SceneData.AmbientColor.rgb * albedo * ao;
     
     vec3 color = ambient + Lo;
-
+    
     // HDR tonemapping
     color = color / (color + vec3(1.0));
     // gamma correct
     color = pow(color, vec3(1.0/2.2)); 
-
+    
     FragColor = vec4(color, 1.0);
 }

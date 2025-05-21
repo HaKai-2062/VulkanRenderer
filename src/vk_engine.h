@@ -84,6 +84,7 @@ private:
 	struct GLFWwindow* m_Window{ nullptr };
 	std::vector<ComputeEffect> m_BGEffects;
 	int m_CurrentBGEffect{ 1 };
+	glm::vec3 m_DirectionalLightDir{ 0.1f, 0.3f, 0.0f };
 
 	VkExtent2D m_DrawExtent;
 	float m_RenderScale = 1.0f;

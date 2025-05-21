@@ -16,7 +16,7 @@
 #include <glm/glm.hpp>
 
 constexpr unsigned int MAX_FRAMES_IN_FLIGHT = 2;
-constexpr unsigned int MAX_POINT_LIGHTS = 16;
+constexpr unsigned int MAX_POINT_LIGHTS = 8;
 
 #define VK_CHECK(x)                                                 \
 	do                                                              \
@@ -145,6 +145,8 @@ struct GPUDrawPushConstants
 {
 	glm::mat4 WorldMatrix;
 	VkDeviceAddress VertexBufferAddress;
+	glm::vec2 Padding;
+	glm::vec4 OverrideColor;
 };
 
 struct GPUSceneData
@@ -153,24 +155,33 @@ struct GPUSceneData
 	glm::mat4 Proj;
 	glm::mat4 ViewProj;
 	glm::vec4 AmbientColor;
-	glm::vec4 SunlightDirection; // w for sun power
-	glm::vec4 SunlightColor;
 	glm::vec4 CameraPosition;
 	float Time;
+	glm::vec3 Padding;
 };
 
-struct PointLight
+struct Point
 {
 	glm::vec3 Position;
-	float Radius;
-	glm::vec3 Color;
 	float Intensity;
+	glm::vec3 Color{ 1.0f };
+	int Padding;
+};
+
+struct Directional
+{
+	glm::vec3 Direction;
+	float Intensity;
+	glm::vec3 Color{ 1.0f };
+	int Padding;
 };
 
 struct LightData
 {
-	PointLight PointLights[MAX_POINT_LIGHTS];
-	uint32_t TotalPointLights;
+	Directional DirectionalLight;
+	Point PointLights[MAX_POINT_LIGHTS];
+	int TotalPointLights;
+	glm::vec3 Padding;
 };
 
 enum class MaterialPass : uint8_t

@@ -22,6 +22,8 @@ layout(push_constant) uniform constants
 {
 	mat4 RenderMatrix;
 	VertexBuffer VertexBuffer;
+	vec2 Padding;
+	vec4 OverrideColor;
 } PushConstants;
 
 void main() 

@@ -29,19 +29,28 @@ layout(push_constant) uniform constants
 {
 	mat4 RenderMatrix;
 	VertexBuffer VertexBuffer;
+	vec2 Padding;
+	vec4 OverrideColor;
 } PushConstants;
 
 void main()
 {
 	Vertex v = PushConstants.VertexBuffer.Vertices[gl_VertexIndex];
-	vec4 position = vec4(v.Position, 1.0f);
-	v_WorldPos = PushConstants.RenderMatrix * position;
+	v_WorldPos = PushConstants.RenderMatrix * vec4(v.Position, 1.0f);
 
 	// This is proj * view * model * pos
 	gl_Position =  u_SceneData.ViewProj * v_WorldPos;
 
 	v_UV = vec2(v.UVX, v.UVY);
 	v_Normal = transpose(inverse(mat3(PushConstants.RenderMatrix))) * v.Normal;
-	v_Color = v.Color.rgb * u_MaterialData.ColorFactors.rgb;
+	if (PushConstants.OverrideColor.w > 0.5f)
+	{
+		v_Color = PushConstants.OverrideColor.rgb;
+	}
+	else
+	{
+		v_Color = v.Color.rgb;
+	}
+	v_Color *= u_MaterialData.ColorFactors.rgb;
 	v_MetalRoughFactor = u_MaterialData.MetalRoughFactors;
 }

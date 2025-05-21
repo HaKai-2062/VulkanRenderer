@@ -22,13 +22,23 @@ layout(push_constant) uniform constants
 {
 	mat4 RenderMatrix;
 	VertexBuffer VertexBuffer;
+	vec2 Padding;
+	vec4 OverrideColor;
 } PushConstants;
 
 void main()
 {
 	Vertex v = PushConstants.VertexBuffer.Vertices[gl_VertexIndex];
+
 	// This is proj * view * model * pos
 	gl_Position = PushConstants.RenderMatrix * vec4(v.Position, 1.0f);
 
-	v_Color = v.Color.rgb;
+	if (PushConstants.OverrideColor.w > 0.5f)
+	{
+		v_Color = PushConstants.OverrideColor.rgb;
+	}
+	else
+	{
+		v_Color = v.Color.rgb;
+	}
 }

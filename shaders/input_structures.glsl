@@ -1,11 +1,19 @@
-#define MAX_POINT_LIGHTS 16
+#define MAX_POINT_LIGHTS 8
 
-struct PointLight
+struct Point
 {
 	vec3 Position;
-	float Radius;
-	vec3 Color;
 	float Intensity;
+	vec3 Color;
+	int Padding;
+};
+
+struct Directional
+{
+	vec3 Direction;
+	float Intensity;
+	vec3 Color;
+	int Padding;
 };
 
 layout(set = 0, binding = 0) uniform  SceneData{   
@@ -13,15 +21,16 @@ layout(set = 0, binding = 0) uniform  SceneData{
 	mat4 Proj;
 	mat4 ViewProj;
 	vec4 AmbientColor;
-	vec4 SunlightDirection; //w for sun power
-	vec4 SunlightColor;
 	vec4 CameraPos;
 	float Time;
+	vec3 Padding;
 } u_SceneData;
 
 layout(set = 0, binding = 1) uniform  LightData{   
-	PointLight PointLights[MAX_POINT_LIGHTS];
+	Directional DirectionalLight;
+	Point PointLights[MAX_POINT_LIGHTS];
 	int TotalPointLights;
+	vec3 Padding;
 } u_Light;
 
 layout(set = 1, binding = 0) uniform GLTFMaterialData{

@@ -6,6 +6,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <glm/gtx/transform.hpp>
+#include <gtc/type_ptr.hpp>
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 #include <VkBootstrap.h>
@@ -145,7 +146,13 @@ void VulkanEngine::MainLoop()
 
 			ImGui::Text("Location:	  %f, %f, %f", pos.x, pos.y, pos.z);
 			ImGui::Text("Rotation:	  %f, %f, %f", rot.x, rot.y, rot.z);
+
+			ImGui::NewLine();
+			ImGui::Text("Directional Light");
+			ImGui::SliderFloat3("Dir", glm::value_ptr(m_DirectionalLightDir), -1.0f, 1.0f);
+			ImGui::ColorEdit3("Color", glm::value_ptr(m_Lights.DirectionalLight.Color));
 		}
+
 		ImGui::End();
 
 		//make imgui calculate internal draw structures
@@ -342,11 +349,15 @@ void VulkanEngine::InitVulkan()
 	features12.bufferDeviceAddress = true;
 	features12.descriptorIndexing = true;
 
+	VkPhysicalDeviceFeatures requiredFeatures{};
+	requiredFeatures.fillModeNonSolid = VK_TRUE;
+
 	vkb::PhysicalDeviceSelector selector{ vkbInstance };
 	vkb::PhysicalDevice physicalDevice = selector
 		.set_minimum_version(1, 3)
 		.set_required_features_13(features) 
 		.set_required_features_12(features12)
+		.set_required_features(requiredFeatures)
 		.allow_any_gpu_device_type(false)
 		.set_surface(m_Surface)
 		.select()
@@ -787,11 +798,11 @@ void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
 
 	MaterialLayout = layoutBuilder.Build(engine->Device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
-	VkDescriptorSetLayout layouts[] = { engine->GPUSceneDataDescriptorLayout, MaterialLayout };
+	std::array<VkDescriptorSetLayout, 2> layouts = { engine->GPUSceneDataDescriptorLayout, MaterialLayout };
 
 	VkPipelineLayoutCreateInfo meshLayoutInfo = VkInit::pipelineLayoutCreateInfo();
-	meshLayoutInfo.setLayoutCount = 2;
-	meshLayoutInfo.pSetLayouts = layouts;
+	meshLayoutInfo.setLayoutCount = layouts.size();
+	meshLayoutInfo.pSetLayouts = layouts.data();
 	meshLayoutInfo.pPushConstantRanges = &matrixRange;
 	meshLayoutInfo.pushConstantRangeCount = 1;
 
@@ -924,6 +935,7 @@ void VulkanEngine::DrawMesh(VkCommandBuffer cmd)
 		glm::mat4 model = glm::translate(m_Lights.PointLights[i].Position) * glm::scale(glm::vec3(0.2f));
 		pushConstants.WorldMatrix = m_SceneData.ViewProj * model;
 		pushConstants.VertexBufferAddress = m_Cube.VertexDeviceAddress;
+		pushConstants.OverrideColor = glm::vec4(m_Lights.PointLights[i].Color, 1.0f);
 
 		vkCmdPushConstants(cmd, m_MeshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 		vkCmdBindIndexBuffer(cmd, m_Cube.IndexBuffer.Buffer, 0, VK_INDEX_TYPE_UINT32);
@@ -959,6 +971,7 @@ void VulkanEngine::DrawCubeMap(VkCommandBuffer cmd)
 	// We need to remove translation from the view matrix so mat4->mat3->mat4
 	pushConstants.WorldMatrix = m_SceneData.Proj * glm::mat4(glm::mat3(m_SceneData.View)) * model;
 	pushConstants.VertexBufferAddress = m_Cube.VertexDeviceAddress;
+	pushConstants.OverrideColor = glm::vec4(0.0f);
 
 	vkCmdPushConstants(cmd, m_CubeMapPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 	vkCmdBindIndexBuffer(cmd, m_Cube.IndexBuffer.Buffer, 0, VK_INDEX_TYPE_UINT32);
@@ -1089,6 +1102,8 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer cmd)
 		GPUDrawPushConstants pushConstants;
 		pushConstants.VertexBufferAddress = draw.VertexBufferAddress;
 		pushConstants.WorldMatrix = draw.Transform;
+		pushConstants.OverrideColor = glm::vec4(0.0f);
+
 		vkCmdPushConstants(cmd, draw.Material->Pipeline->Layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 		vkCmdDrawIndexed(cmd, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
 		
@@ -1391,27 +1406,32 @@ void VulkanEngine::UpdateScene()
 	m_SceneData.ViewProj = m_SceneData.Proj * m_SceneData.View;
 
 	// Default lighting parameters
-	m_SceneData.AmbientColor = glm::vec4(0.1f);
-	m_SceneData.SunlightColor = glm::vec4(1.0f);
-	m_SceneData.SunlightDirection = glm::vec4(0.0f, 1.0f, 0.5f, 1.0f);
-
+	m_SceneData.AmbientColor = glm::vec4(0.03f);
+	
 	m_SceneData.CameraPosition = glm::vec4(m_Camera.GetCameraPosition(), 1.0);
 	m_SceneData.Time = glfwGetTime();
 
+	// Point lights
 	float lightSpeed = 1.0f;
 	//std::vector<glm::vec3> lightLocations = {  };
 	std::vector<glm::vec3> lightLocations = { glm::vec3(-8.0f, 8.5f, 0.0f), glm::vec3(33.0f, 8.5f, 0.0f) };
+	
 	for (uint32_t i = 0; i < lightLocations.size(); i++)
 	{
-		PointLight light = {};
+		Point light = {};
 		light.Position = lightLocations[i] + glm::vec3(8.0f * sin(glfwGetTime() * lightSpeed), 0.0f, 9.0f * cos(glfwGetTime() * lightSpeed));
-		light.Radius = 1.0f;
-		light.Color = glm::vec3(1.0f, 1.0f, 1.0f);
 		light.Intensity = 255.0f;
+		light.Color = glm::vec3(sin(glfwGetTime() * 0.6) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 2.094) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 4.188) * 0.5 + 0.5);
 
 		m_Lights.PointLights[i] = light;
 	}
+
 	m_Lights.TotalPointLights = lightLocations.size();
+
+	// Directional Lights
+	m_Lights.DirectionalLight.Direction = glm::normalize(m_DirectionalLightDir);
+	m_Lights.DirectionalLight.Intensity = 1.0f;
+	//m_Lights.DirectionalLight.Color = glm::vec3(1.0f, 1.0f, 1.0f);
 
 	//for (int x = -3; x < 3; x++)
 	//{
