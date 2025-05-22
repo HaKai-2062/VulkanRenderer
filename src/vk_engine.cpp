@@ -29,6 +29,7 @@ static const bool bUseValidationLayers = true;
 static VkExtent2D ScreenSize{ 1920, 1080 };
 
 bool isVisible(const RenderObject& obj, const glm::mat4& viewproj);
+void ImGuiDarkTheme();
 
 void VulkanEngine::Init()
 {
@@ -129,7 +130,7 @@ void VulkanEngine::MainLoop()
 		//some imgui UI to test
 		//ImGui::ShowDemoWindow();
 
-		if (ImGui::Begin("background"))
+		if (ImGui::Begin("Main Menu"))
 		{
 			ImGui::SliderFloat("Render Scale", &m_RenderScale, 0.3f, 1.f);
 
@@ -148,9 +149,42 @@ void VulkanEngine::MainLoop()
 			ImGui::Text("Rotation:	  %f, %f, %f", rot.x, rot.y, rot.z);
 
 			ImGui::NewLine();
-			ImGui::Text("Directional Light");
-			ImGui::SliderFloat3("Dir", glm::value_ptr(m_DirectionalLightDir), -1.0f, 1.0f);
-			ImGui::ColorEdit3("Color", glm::value_ptr(m_Lights.DirectionalLight.Color));
+			if (ImGui::CollapsingHeader("Lights"))
+			{
+				if (ImGui::TreeNode("Directional light"))
+				{
+					ImGui::ColorEdit3("Color", glm::value_ptr(m_Lights.DirectionalLight.Color));
+					ImGui::SliderFloat3("Direction", glm::value_ptr(m_DirectionalLightDir), -1.0f, 1.0f);
+					ImGui::TreePop();
+				}
+
+				for (size_t i = 0; i < m_Lights.TotalPointLights; i++)
+				{
+					if (ImGui::TreeNode(("Pointlight [" + std::to_string(i + 1) + "]").c_str()))
+					{
+						ImGui::ColorEdit3("Position", glm::value_ptr(m_Lights.PointLights[i].Position));
+						ImGui::ColorEdit3("Color", glm::value_ptr(m_Lights.PointLights[i].Color));
+						ImGui::SliderFloat("Intensity", &m_Lights.PointLights[i].Intensity, 0.0f, 999.0f);
+						ImGui::TreePop();
+					}
+				}
+
+				for (size_t i = 0; i < m_Lights.TotalSpotLights; i++)
+				{
+					if (ImGui::TreeNode(("Spotlight [" + std::to_string(i + 1) + "]").c_str()))
+					{
+						ImGui::ColorEdit3("Position", glm::value_ptr(m_Lights.SpotLights[i].Position));
+						ImGui::ColorEdit3("Color", glm::value_ptr(m_Lights.SpotLights[i].Color));
+						ImGui::ColorEdit3("Direction", glm::value_ptr(m_Lights.SpotLights[i].Direction));
+						ImGui::SliderFloat("Cutoff", &m_Lights.SpotLights[i].Cutoff, 0.0f, 1.0f);
+						ImGui::SliderFloat("OuterCutoff", &m_Lights.SpotLights[i].OuterCutoff, 0.0f, 1.0f);
+						ImGui::SliderFloat("Constant", &m_Lights.SpotLights[i].Constant, 0.0f, 1.0f);
+						ImGui::SliderFloat("Linear", &m_Lights.SpotLights[i].Linear, 0.0f, 1.0f);
+						ImGui::SliderFloat("Quadratic", &m_Lights.SpotLights[i].Quadratic, 0.0f, 2.0f);
+						ImGui::TreePop();
+					}
+				}
+			}
 		}
 
 		ImGui::End();
@@ -817,6 +851,7 @@ void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
 	PipelineBuilder pipelineBuilder;
 	pipelineBuilder.SetShaders(vertexShader, fragShader);
 	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	//pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_LINE);
 	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
 	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 	pipelineBuilder.SetMultiSamplingNone();
@@ -1203,6 +1238,8 @@ void VulkanEngine::InitImGui()
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
 
+	ImGuiDarkTheme();
+
 	// this initializes imgui for SDL
 	ImGui_ImplGlfw_InitForVulkan(m_Window, true);
 
@@ -1411,28 +1448,61 @@ void VulkanEngine::UpdateScene()
 	m_SceneData.CameraPosition = glm::vec4(m_Camera.GetCameraPosition(), 1.0);
 	m_SceneData.Time = glfwGetTime();
 
+
+	auto ParamRectangleTrace = [](glm::vec2 pMin, glm::vec2 pMax, float t, bool clockwise) -> glm::vec2 {
+
+		// Normalize time to [0, 1]
+		t = std::fmod(t, 1.0f);
+		t = clockwise ? t : 1.0f - t;
+
+		float width = pMax.x - pMin.x;
+		float height = pMax.y - pMin.y;
+
+		float perimeter = 2.0f * (width + height);
+		float dist = t * perimeter;
+
+		glm::vec2 result;
+
+		if (dist < width)
+		{
+			result = { pMin.x + dist, pMin.y };
+		}
+		else if (dist < width + height)
+		{
+			result = { pMax.x, pMin.y + (dist - width) };
+		}
+		else if (dist < 2.0f * width + height)
+		{
+			result = { pMax.x - (dist - (width + height)), pMax.y };
+		}
+		else
+		{
+			result = { pMin.x, pMax.y - (dist - (2.0f * width + height)) };
+		}
+
+		return result;
+	};
+
+	glm::vec2 light1XZ = ParamRectangleTrace({ -9.5f, -3.3f }, { 9.5f, 3.3f }, glfwGetTime() * 0.2f, true);
+	glm::vec2 light2XZ = ParamRectangleTrace({ -9.5f, -3.3f }, { 9.5f, 3.3f }, glfwGetTime() * 0.2f, false);
+
 	// Point lights
 	float lightSpeed = 1.0f;
 	//std::vector<glm::vec3> lightLocations = {  };
-	std::vector<glm::vec3> lightLocations = { glm::vec3(-8.0f, 8.5f, 0.0f), glm::vec3(33.0f, 8.5f, 0.0f) };
-	
-	for (uint32_t i = 0; i < lightLocations.size(); i++)
+	//std::vector<glm::vec3> lightLocations = { glm::vec3(-8.0f, 8.5f, 0.0f), glm::vec3(33.0f, 8.5f, 0.0f) };
+	std::vector lightLocations = { glm::vec3(light1XZ.x, 2.0f, light1XZ.y) , glm::vec3(light2XZ.x, 5.0f, light2XZ.y) };
+	for (size_t i = 0; i < lightLocations.size(); i++)
 	{
-		Point light = {};
-		light.Position = lightLocations[i] + glm::vec3(8.0f * sin(glfwGetTime() * lightSpeed), 0.0f, 9.0f * cos(glfwGetTime() * lightSpeed));
-		light.Intensity = 255.0f;
+		PointLight& light = m_Lights.PointLights[i];
+		//light.Position = lightLocations[i] + glm::vec3(8.0f * sin(glfwGetTime() * lightSpeed), 0.0f, 9.0f * cos(glfwGetTime() * lightSpeed));
+		light.Position = lightLocations[i];
 		light.Color = glm::vec3(sin(glfwGetTime() * 0.6) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 2.094) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 4.188) * 0.5 + 0.5);
-
-		m_Lights.PointLights[i] = light;
 	}
-
 	m_Lights.TotalPointLights = lightLocations.size();
 
 	// Directional Lights
 	m_Lights.DirectionalLight.Direction = glm::normalize(m_DirectionalLightDir);
-	m_Lights.DirectionalLight.Intensity = 1.0f;
 	//m_Lights.DirectionalLight.Color = glm::vec3(1.0f, 1.0f, 1.0f);
-
 	//for (int x = -3; x < 3; x++)
 	//{
 
@@ -1441,6 +1511,17 @@ void VulkanEngine::UpdateScene()
 
 	//	m_LoadedNodes["Cube"]->Draw(translation * scale, m_MainDrawContext);
 	//}
+
+	// Spot lights
+	lightLocations = { m_SceneData.CameraPosition };
+	for (size_t i = 0; i < lightLocations.size(); i++)
+	{
+		SpotLight& light = m_Lights.SpotLights[i];
+		light.Position = lightLocations[i];
+		// This is forward vector and hopefully this direction is already normalized
+		light.Direction = { m_SceneData.View[0][2], m_SceneData.View[1][2], m_SceneData.View[2][2] };
+	}
+	m_Lights.TotalSpotLights = lightLocations.size();
 
 	m_LoadedScenes["structure"]->Draw(glm::mat4{ 1.0f }, m_MainDrawContext);
 
@@ -1521,4 +1602,90 @@ bool isVisible(const RenderObject& obj, const glm::mat4& viewproj)
 	{
 		return true;
 	}
+}
+
+// Dark Theme for ImGui
+// Source: https://github.com/ocornut/imgui/issues/707#issuecomment-917151020
+void ImGuiDarkTheme()
+{
+	ImVec4* colors = ImGui::GetStyle().Colors;
+	colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+	colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+	colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+	colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+	colors[ImGuiCol_PopupBg] = ImVec4(0.19f, 0.19f, 0.19f, 0.92f);
+	colors[ImGuiCol_Border] = ImVec4(0.19f, 0.19f, 0.19f, 0.29f);
+	colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.24f);
+	colors[ImGuiCol_FrameBg] = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
+	colors[ImGuiCol_FrameBgHovered] = ImVec4(0.19f, 0.19f, 0.19f, 0.54f);
+	colors[ImGuiCol_FrameBgActive] = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
+	colors[ImGuiCol_TitleBg] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+	colors[ImGuiCol_TitleBgActive] = ImVec4(0.06f, 0.06f, 0.06f, 1.00f);
+	colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+	colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+	colors[ImGuiCol_ScrollbarBg] = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
+	colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.34f, 0.34f, 0.34f, 0.54f);
+	colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.40f, 0.54f);
+	colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.56f, 0.56f, 0.56f, 0.54f);
+	colors[ImGuiCol_CheckMark] = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
+	colors[ImGuiCol_SliderGrab] = ImVec4(0.34f, 0.34f, 0.34f, 0.54f);
+	colors[ImGuiCol_SliderGrabActive] = ImVec4(0.56f, 0.56f, 0.56f, 0.54f);
+	colors[ImGuiCol_Button] = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
+	colors[ImGuiCol_ButtonHovered] = ImVec4(0.19f, 0.19f, 0.19f, 0.54f);
+	colors[ImGuiCol_ButtonActive] = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
+	colors[ImGuiCol_Header] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	colors[ImGuiCol_HeaderHovered] = ImVec4(0.00f, 0.00f, 0.00f, 0.36f);
+	colors[ImGuiCol_HeaderActive] = ImVec4(0.20f, 0.22f, 0.23f, 0.33f);
+	colors[ImGuiCol_Separator] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+	colors[ImGuiCol_SeparatorHovered] = ImVec4(0.44f, 0.44f, 0.44f, 0.29f);
+	colors[ImGuiCol_SeparatorActive] = ImVec4(0.40f, 0.44f, 0.47f, 1.00f);
+	colors[ImGuiCol_ResizeGrip] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+	colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.44f, 0.44f, 0.44f, 0.29f);
+	colors[ImGuiCol_ResizeGripActive] = ImVec4(0.40f, 0.44f, 0.47f, 1.00f);
+	colors[ImGuiCol_Tab] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	colors[ImGuiCol_TabHovered] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+	colors[ImGuiCol_TabActive] = ImVec4(0.20f, 0.20f, 0.20f, 0.36f);
+	colors[ImGuiCol_TabUnfocused] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+	colors[ImGuiCol_DockingPreview] = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
+	colors[ImGuiCol_DockingEmptyBg] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	colors[ImGuiCol_PlotLines] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	colors[ImGuiCol_PlotHistogram] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	colors[ImGuiCol_TableHeaderBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	colors[ImGuiCol_TableBorderStrong] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+	colors[ImGuiCol_TableBorderLight] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+	colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+	colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+	colors[ImGuiCol_TextSelectedBg] = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
+	colors[ImGuiCol_DragDropTarget] = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
+	colors[ImGuiCol_NavHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+	colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 0.70f);
+	colors[ImGuiCol_NavWindowingDimBg] = ImVec4(1.00f, 0.00f, 0.00f, 0.20f);
+	colors[ImGuiCol_ModalWindowDimBg] = ImVec4(1.00f, 0.00f, 0.00f, 0.35f);
+
+	ImGuiStyle& style = ImGui::GetStyle();
+	style.WindowPadding = ImVec2(8.00f, 8.00f);
+	style.FramePadding = ImVec2(5.00f, 2.00f);
+	style.CellPadding = ImVec2(6.00f, 6.00f);
+	style.ItemSpacing = ImVec2(6.00f, 6.00f);
+	style.ItemInnerSpacing = ImVec2(6.00f, 6.00f);
+	style.TouchExtraPadding = ImVec2(0.00f, 0.00f);
+	style.IndentSpacing = 25;
+	style.ScrollbarSize = 15;
+	style.GrabMinSize = 10;
+	style.WindowBorderSize = 1;
+	style.ChildBorderSize = 1;
+	style.PopupBorderSize = 1;
+	style.FrameBorderSize = 1;
+	style.TabBorderSize = 1;
+	style.WindowRounding = 7;
+	style.ChildRounding = 4;
+	style.FrameRounding = 3;
+	style.PopupRounding = 4;
+	style.ScrollbarRounding = 9;
+	style.GrabRounding = 3;
+	style.LogSliderDeadzone = 4;
+	style.TabRounding = 4;
 }

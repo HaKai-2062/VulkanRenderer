@@ -1,6 +1,7 @@
 #define MAX_POINT_LIGHTS 8
+#define MAX_SPOT_LIGHTS 8
 
-struct Point
+struct PointLight
 {
 	vec3 Position;
 	float Intensity;
@@ -16,6 +17,19 @@ struct Directional
 	int Padding;
 };
 
+struct SpotLight
+{
+	vec3 Position;
+	float Cutoff;
+	vec3 Direction;
+	float OuterCutoff;
+	vec3 Color;
+	float Constant;
+	float Linear;
+	float Quadratic;
+	vec2 Padding;
+};
+
 layout(set = 0, binding = 0) uniform  SceneData{   
 	mat4 View;
 	mat4 Proj;
@@ -28,9 +42,12 @@ layout(set = 0, binding = 0) uniform  SceneData{
 
 layout(set = 0, binding = 1) uniform  LightData{   
 	Directional DirectionalLight;
-	Point PointLights[MAX_POINT_LIGHTS];
+	PointLight PointLights[MAX_POINT_LIGHTS];
+	SpotLight SpotLights[MAX_SPOT_LIGHTS];
+
 	int TotalPointLights;
-	vec3 Padding;
+	int TotalSpotLights;
+	vec2 Padding;
 } u_Light;
 
 layout(set = 1, binding = 0) uniform GLTFMaterialData{

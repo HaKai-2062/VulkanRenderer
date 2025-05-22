@@ -17,6 +17,7 @@
 
 constexpr unsigned int MAX_FRAMES_IN_FLIGHT = 2;
 constexpr unsigned int MAX_POINT_LIGHTS = 8;
+constexpr unsigned int MAX_SPOT_LIGHTS = 8;
 
 #define VK_CHECK(x)                                                 \
 	do                                                              \
@@ -160,28 +161,44 @@ struct GPUSceneData
 	glm::vec3 Padding;
 };
 
-struct Point
+struct PointLight
 {
 	glm::vec3 Position;
-	float Intensity;
+	float Intensity = 10.0f;
 	glm::vec3 Color{ 1.0f };
-	int Padding;
+	uint32_t Padding;
 };
 
 struct Directional
 {
 	glm::vec3 Direction;
-	float Intensity;
+	float Intensity = 1.0f;
 	glm::vec3 Color{ 1.0f };
-	int Padding;
+	uint32_t Padding;
+};
+
+struct SpotLight
+{
+	glm::vec3 Position;
+	float Cutoff = std::cos(glm::radians(25.0f));
+	glm::vec3 Direction;
+	float OuterCutoff = std::cos(glm::radians(35.0f));
+	glm::vec3 Color = glm::vec3(1.0f);
+	float Constant = 1.0f;
+	float Linear = 0.09f;
+	float Quadratic = 0.032f;
+	glm::vec2 Padding;
 };
 
 struct LightData
 {
 	Directional DirectionalLight;
-	Point PointLights[MAX_POINT_LIGHTS];
-	int TotalPointLights;
-	glm::vec3 Padding;
+	PointLight PointLights[MAX_POINT_LIGHTS];
+	SpotLight SpotLights[MAX_SPOT_LIGHTS];
+
+	uint32_t TotalPointLights;
+	uint32_t TotalSpotLights;
+	glm::vec2 Padding;
 };
 
 enum class MaterialPass : uint8_t
