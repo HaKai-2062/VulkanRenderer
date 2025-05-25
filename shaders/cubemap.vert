@@ -29,8 +29,10 @@ layout(push_constant) uniform constants
 void main() 
 {
 	Vertex v = PushConstants.VertexBuffer.Vertices[gl_VertexIndex];
+
 	// This is proj * view * model * pos
 	gl_Position = PushConstants.RenderMatrix * vec4(v.Position, 1.0f);
 
 	v_UVW = v.Position;
+	v_UVW.xy *= -1.0f;
 }

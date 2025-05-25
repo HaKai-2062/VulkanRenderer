@@ -51,11 +51,11 @@ struct DrawContext
 
 struct EngineStats
 {
-	float FrameTime;
-	int TriangleCount;
-	int DrawcallCount;
-	float SceneUpdateTime;
-	float MeshDrawTime;
+	float FrameTime = 0.0f;;
+	int TriangleCount = 0;
+	int DrawcallCount = 0;
+	float SceneUpdateTime = 0.0f;
+	float MeshDrawTime = 0.0f;
 };
 
 class VulkanEngine

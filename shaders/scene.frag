@@ -154,19 +154,22 @@ void main()
     {
         SpotLight spotLight = u_Light.SpotLights[i];
 
-        vec3 fragToLight = spotLight.Position - v_WorldPos.xyz;
-        vec3 L = normalize(fragToLight);
-        float distance = length(fragToLight);
-        float attenuation = 1.0f / (spotLight.Constant + spotLight.Linear * distance + 
-                                  spotLight.Quadratic * (distance * distance));
+        if (spotLight.Constant + spotLight.Linear + spotLight.Quadratic > 0.01f)
+        {
+            vec3 fragToLight = spotLight.Position - v_WorldPos.xyz;
+            vec3 L = normalize(fragToLight);
+            float distance = length(fragToLight);
+            float attenuation = 1.0f / (spotLight.Constant + spotLight.Linear * distance + 
+                                      spotLight.Quadratic * (distance * distance));
         
-        // Spotlight intensity (smoothstep between inner and outer cone)
-        float theta = dot(L, normalize(spotLight.Direction));
-        float epsilon = spotLight.Cutoff - spotLight.OuterCutoff;
-        float intensity = clamp((theta - spotLight.OuterCutoff) / epsilon, 0.0, 1.0);
-        vec3 radiance = spotLight.Color * attenuation * intensity;
+            // Spotlight intensity (smoothstep between inner and outer cone)
+            float theta = dot(L, normalize(spotLight.Direction));
+            float epsilon = spotLight.Cutoff - spotLight.OuterCutoff;
+            float intensity = clamp((theta - spotLight.OuterCutoff) / epsilon, 0.0, 1.0);
+            vec3 radiance = spotLight.Color * attenuation * intensity;
         
-        Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic);
+            Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic);
+        }
     }
     
     // ambient lighting (note that the next IBL tutorial will replace 

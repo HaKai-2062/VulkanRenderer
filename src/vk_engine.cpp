@@ -562,7 +562,7 @@ void VulkanEngine::InitDescriptors()
 	}
 
 	// Upload cubemap stuff
-	if (!VkUtils::loadCubeMap(this, ASSET_PATH "cubemaps/cubemap_yokohama_rgba.ktx", VK_FORMAT_R8G8B8A8_UNORM))
+	if (!VkUtils::loadCubeMap(this, ASSET_PATH "/hdr/uffizi_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when trying to load cubemap\n");
 		glfwSetWindowShouldClose(m_Window, GLFW_TRUE);
@@ -651,7 +651,7 @@ void VulkanEngine::InitCubeMapPipeline()
 	//pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 	pipelineBuilder.DisableDepthTest();
 
-	//pipelineBuilder.SetColorAttachmentFormat(CubeMap.ImageFormat);
+	pipelineBuilder.SetColorAttachmentFormat(CubeMap.ImageFormat);
 	// Depth format is necessary because in our draw we require it
 	pipelineBuilder.SetDepthFormat(VK_FORMAT_D32_SFLOAT);
 	m_CubeMapPipeline = pipelineBuilder.BuildPipeline(Device);
@@ -1143,7 +1143,7 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer cmd)
 		vkCmdDrawIndexed(cmd, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
 		
 		Stats.DrawcallCount++;
-		Stats.TriangleCount = draw.IndexCount / 3;
+		Stats.TriangleCount += draw.IndexCount / 3;
 		};
 
 	for (auto& r : opaqueDraws)

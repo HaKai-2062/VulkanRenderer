@@ -164,11 +164,12 @@ bool VkUtils::loadCubeMap(VulkanEngine* engine, std::string_view filename, VkFor
             // Calculate offset into staging buffer for the current mip level and face
             ktx_size_t offset;
             KTX_error_code ret = ktxTexture_GetImageOffset(ktxTexture, level, 0, face, &offset);
-            if (result != KTX_SUCCESS)
+            if (ret != KTX_SUCCESS)
             {
                 ktxTexture_Destroy(ktxTexture);
                 return false;
             }
+
             VkBufferImageCopy bufferCopyRegion = {};
             bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             bufferCopyRegion.imageSubresource.mipLevel = level;
