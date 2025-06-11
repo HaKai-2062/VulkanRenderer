@@ -95,6 +95,7 @@ private:
 
 	DescriptorAllocatorDynamic m_GlobalDescriptorAllocator;
 	GPUMeshBuffers m_Cube;
+	GPUMeshBuffers m_Triangle;
 	std::vector<std::shared_ptr<MeshAsset>> m_TestMeshes;
 	GPUSceneData m_SceneData;
 	LightData m_Lights;

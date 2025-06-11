@@ -151,6 +151,8 @@ void VulkanEngine::MainLoop()
 			ImGui::NewLine();
 			if (ImGui::CollapsingHeader("Lights"))
 			{
+				ImGui::ColorEdit3("Ambient Light", glm::value_ptr(m_SceneData.AmbientColor));
+
 				if (ImGui::TreeNode("Directional light"))
 				{
 					ImGui::ColorEdit3("Color", glm::value_ptr(m_Lights.DirectionalLight.Color));
@@ -648,8 +650,8 @@ void VulkanEngine::InitCubeMapPipeline()
 	pipelineBuilder.SetMultiSamplingNone();
 	pipelineBuilder.DisableBlending();
 	//pipelineBuilder.EnableBlendingAdditive();
-	//pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-	pipelineBuilder.DisableDepthTest();
+	pipelineBuilder.EnableDepthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	//pipelineBuilder.DisableDepthTest();
 
 	pipelineBuilder.SetColorAttachmentFormat(CubeMap.ImageFormat);
 	// Depth format is necessary because in our draw we require it
@@ -748,9 +750,20 @@ void VulkanEngine::InitDefaultData()
 
 	m_Cube = UploadMesh(cubeIndices, cubeVertices);
 
+	std::array<Vertex, 3> triangleVertices;
+	triangleVertices[0].Position = { -1.0f, -1.0f, 0.001f };
+	triangleVertices[1].Position = {  3.0f, -1.0f, 0.001f };
+	triangleVertices[2].Position = {  -1.0f, 3.0f, 0.001f };
+
+	std::array<uint32_t, 3> triangleIndices = { 0, 1, 2 };
+
+	m_Triangle = UploadMesh(triangleIndices, triangleVertices);
+
 	m_MainDeletionQueue.PushFunction([&]() {
 		DestroyBuffer(m_Cube.IndexBuffer);
 		DestroyBuffer(m_Cube.VertexBuffer);
+		DestroyBuffer(m_Triangle.IndexBuffer);
+		DestroyBuffer(m_Triangle.VertexBuffer);
 		});
 
 	//m_TestMeshes = LoadGltfMeshes(this, ASSET_PATH "basicmesh.glb").value();
@@ -1002,17 +1015,16 @@ void VulkanEngine::DrawCubeMap(VkCommandBuffer cmd)
 	vkCmdSetScissor(cmd, 0, 1, &scissor);
 
 	GPUDrawPushConstants pushConstants;
-	glm::mat4 model = glm::identity<glm::mat4>();
-	// We need to remove translation from the view matrix so mat4->mat3->mat4
-	pushConstants.WorldMatrix = m_SceneData.Proj * glm::mat4(glm::mat3(m_SceneData.View)) * model;
-	pushConstants.VertexBufferAddress = m_Cube.VertexDeviceAddress;
+	// This removes translations and does invView * invProj cuz order is opposite in inverse
+	pushConstants.WorldMatrix = glm::mat4(glm::transpose(glm::mat3(m_SceneData.View))) * glm::inverse(m_SceneData.Proj);
+	pushConstants.VertexBufferAddress = m_Triangle.VertexDeviceAddress;
 	pushConstants.OverrideColor = glm::vec4(0.0f);
 
 	vkCmdPushConstants(cmd, m_CubeMapPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 	vkCmdBindIndexBuffer(cmd, m_Cube.IndexBuffer.Buffer, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_CubeMapPipelineLayout, 0, 1, &m_CubeMapDescriptors, 0, nullptr);
 
-	vkCmdDrawIndexed(cmd, 36, 1, 0, 0, 0);
+	vkCmdDrawIndexed(cmd, 3, 1, 0, 0, 0);
 }
 
 void VulkanEngine::DrawMain(VkCommandBuffer cmd)
@@ -1026,9 +1038,9 @@ void VulkanEngine::DrawMain(VkCommandBuffer cmd)
 	
 	auto start = std::chrono::system_clock::now();
 
-	DrawCubeMap(cmd);
 	DrawGeometry(cmd);
 	DrawMesh(cmd);
+	DrawCubeMap(cmd);
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -1442,9 +1454,6 @@ void VulkanEngine::UpdateScene()
 	m_SceneData.Proj[1][1] *= -1;
 	m_SceneData.ViewProj = m_SceneData.Proj * m_SceneData.View;
 
-	// Default lighting parameters
-	m_SceneData.AmbientColor = glm::vec4(0.03f);
-	
 	m_SceneData.CameraPosition = glm::vec4(m_Camera.GetCameraPosition(), 1.0);
 	m_SceneData.Time = glfwGetTime();
 
@@ -1488,9 +1497,9 @@ void VulkanEngine::UpdateScene()
 
 	// Point lights
 	float lightSpeed = 1.0f;
-	//std::vector<glm::vec3> lightLocations = {  };
+	std::vector<glm::vec3> lightLocations = {  };
 	//std::vector<glm::vec3> lightLocations = { glm::vec3(-8.0f, 8.5f, 0.0f), glm::vec3(33.0f, 8.5f, 0.0f) };
-	std::vector lightLocations = { glm::vec3(light1XZ.x, 2.0f, light1XZ.y) , glm::vec3(light2XZ.x, 5.0f, light2XZ.y) };
+	//std::vector lightLocations = { glm::vec3(light1XZ.x, 2.0f, light1XZ.y) , glm::vec3(light2XZ.x, 5.0f, light2XZ.y) };
 	for (size_t i = 0; i < lightLocations.size(); i++)
 	{
 		PointLight& light = m_Lights.PointLights[i];
@@ -1513,7 +1522,9 @@ void VulkanEngine::UpdateScene()
 	//}
 
 	// Spot lights
-	lightLocations = { m_SceneData.CameraPosition };
+	lightLocations = {  };
+	//lightLocations = { m_SceneData.CameraPosition };
+
 	for (size_t i = 0; i < lightLocations.size(); i++)
 	{
 		SpotLight& light = m_Lights.SpotLights[i];

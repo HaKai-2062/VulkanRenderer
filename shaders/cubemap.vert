@@ -2,7 +2,7 @@
 
 #extension GL_EXT_buffer_reference : require
 
-layout (location = 0) out vec3 v_UVW;
+layout (location = 0) out vec3 v_SampleDir;
 
 struct Vertex
 {
@@ -29,10 +29,7 @@ layout(push_constant) uniform constants
 void main() 
 {
 	Vertex v = PushConstants.VertexBuffer.Vertices[gl_VertexIndex];
-
-	// This is proj * view * model * pos
-	gl_Position = PushConstants.RenderMatrix * vec4(v.Position, 1.0f);
-
-	v_UVW = v.Position;
-	v_UVW.xy *= -1.0f;
+	gl_Position = vec4(v.Position, 1.0f);
+	v_SampleDir = vec3(PushConstants.RenderMatrix * vec4(v.Position, 1.0f));
+	v_SampleDir *= -1.0f;
 }
