@@ -8,6 +8,7 @@ layout (location = 1) in vec3 v_Color;
 layout (location = 2) in vec2 v_UV;
 layout (location = 3) in vec4 v_WorldPos;
 layout (location = 4) in vec4 v_MetalRoughFactor;
+layout (location = 5) in vec4 v_ShadowCoord;
 
 layout (location = 0) out vec4 FragColor;
 
@@ -34,7 +35,7 @@ vec3 getNormalFromMap()
     return normalize(TBN * tangentNormal);
 }
 // ----------------------------------------------------------------------------
-float DistributionGGX(vec3 N, vec3 H, float roughness)
+float distributionGGX(vec3 N, vec3 H, float roughness)
 {
     float a = roughness*roughness;
     float a2 = a*a;
@@ -48,7 +49,7 @@ float DistributionGGX(vec3 N, vec3 H, float roughness)
     return nom / denom;
 }
 // ----------------------------------------------------------------------------
-float GeometrySchlickGGX(float NdotV, float roughness)
+float geometrySchlickGGX(float NdotV, float roughness)
 {
     float r = (roughness + 1.0);
     float k = (r*r) / 8.0;
@@ -59,12 +60,12 @@ float GeometrySchlickGGX(float NdotV, float roughness)
     return nom / denom;
 }
 // ----------------------------------------------------------------------------
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 {
     float NdotV = max(dot(N, V), 0.0);
     float NdotL = max(dot(N, L), 0.0);
-    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
-    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
+    float ggx2 = geometrySchlickGGX(NdotV, roughness);
+    float ggx1 = geometrySchlickGGX(NdotL, roughness);
 
     return ggx1 * ggx2;
 }
@@ -77,9 +78,9 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 vec3 calculateLightContribution(vec3 N, vec3 V, vec3 L, vec3 F0, vec3 radiance, vec3 albedo, float roughness, float metallic)
 {
     vec3 H = normalize(V + L);
-    float NDF = DistributionGGX(N, H, roughness);
+    float NDF = distributionGGX(N, H, roughness);
     // Cook-Torrance BRDF
-    float G   = GeometrySmith(N, V, L, roughness);
+    float G   = geometrySmith(N, V, L, roughness);
     vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
        
     vec3 numerator    = NDF * G * F;
@@ -104,6 +105,26 @@ vec3 calculateLightContribution(vec3 N, vec3 V, vec3 L, vec3 F0, vec3 radiance, 
     return (kD * albedo / PI + specular) * radiance * NdotL;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
 }
 
+float shadowProj(vec4 shadowCoord, vec2 off)
+{
+	float shadow = 1.0;
+    if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0 || shadowCoord.y < 0.0 || shadowCoord.y > 1.0 || shadowCoord.z > 1.0)
+        return shadow; // Outside shadow map = always lit. Will cause issues if we add multiple shadowmap 
+                       // outputs tho later on so maybe fix the clamp to edge thingy later on
+
+	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) 
+	{
+		float dist = texture(u_SpotLightShadowMap, shadowCoord.st + off).r;
+        dist -= 0.001f;  // Bias
+
+        // Shouldnt the dist < z be the check in reverse z buffer setup?
+		if (shadowCoord.w > 0.0 && dist > shadowCoord.z)
+		{
+			shadow = 0.0f;
+		}
+	}
+	return shadow;
+}
 
 // ----------------------------------------------------------------------------
 void main()
@@ -123,6 +144,7 @@ void main()
 
     // reflectance equation
     vec3 Lo = vec3(0.0);
+    float shadow = shadowProj(v_ShadowCoord / v_ShadowCoord.w, vec2(0.0f));
 
     // Point lights
     for(int i = 0; i < u_Light.TotalPointLights; ++i)
@@ -163,7 +185,7 @@ void main()
                                       spotLight.Quadratic * (distance * distance));
         
             // Spotlight intensity (smoothstep between inner and outer cone)
-            float theta = dot(L, normalize(spotLight.Direction));
+            float theta = dot(L, -spotLight.Direction); // Normalize spotlight direction before passing
             float epsilon = spotLight.Cutoff - spotLight.OuterCutoff;
             float intensity = clamp((theta - spotLight.OuterCutoff) / epsilon, 0.0, 1.0);
             vec3 radiance = spotLight.Color * attenuation * intensity;
@@ -176,12 +198,12 @@ void main()
     // this ambient lighting with environment lighting).
     vec3 ambient = u_SceneData.AmbientColor.rgb * albedo * ao;
     
-    vec3 color = ambient + Lo;
+    vec3 color = ambient + Lo * shadow;
     
     // HDR tonemapping
     color = color / (color + vec3(1.0));
     // gamma correct
-    color = pow(color, vec3(1.0/2.2)); 
+    color = pow(color, vec3(1.0/2.2));
     
     FragColor = vec4(color, 1.0);
 }

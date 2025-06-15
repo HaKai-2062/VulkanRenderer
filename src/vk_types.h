@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
@@ -57,7 +57,7 @@ struct DescriptorLayoutBuilder
 {
 	std::vector<VkDescriptorSetLayoutBinding> Bindings;
 
-	void AddBinding(uint32_t binding, VkDescriptorType type);
+	void AddBinding(uint32_t binding, VkDescriptorType type, uint32_t count = 1);
 	void Clear();
 	VkDescriptorSetLayout Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
 };
@@ -93,6 +93,7 @@ struct DescriptorWriter
 	std::vector<VkWriteDescriptorSet> Writes;
 
 	void WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
+	void WriteImage(int binding, const std::vector<VkImageView>& images, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
 	void WriteBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
 	void Clear();
 	void UpdateSet(VkDevice device, VkDescriptorSet set);
@@ -167,6 +168,7 @@ struct PointLight
 	float Intensity = 10.0f;
 	glm::vec3 Color{ 1.0f };
 	uint32_t Padding;
+	glm::mat4 LightProj;
 };
 
 struct Directional
@@ -175,19 +177,21 @@ struct Directional
 	float Intensity = 1.0f;
 	glm::vec3 Color{ 1.0f };
 	uint32_t Padding;
+	glm::mat4 LightProj;
 };
 
 struct SpotLight
 {
 	glm::vec3 Position;
 	float Cutoff = std::cos(glm::radians(25.0f));
-	glm::vec3 Direction;
+	glm::vec3 Direction = { 0.0f, -1.0, 0.0f };
 	float OuterCutoff = std::cos(glm::radians(35.0f));
 	glm::vec3 Color = glm::vec3(1.0f);
 	float Constant = 1.0f;
 	float Linear = 0.09f;
 	float Quadratic = 0.032f;
 	glm::vec2 Padding;
+	glm::mat4 LightProj;
 };
 
 struct LightData

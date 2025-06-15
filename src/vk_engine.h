@@ -108,6 +108,8 @@ private:
 	std::unordered_map<std::string, std::shared_ptr<Node>> m_LoadedNodes;
 	Camera m_Camera;
 	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> m_LoadedScenes;
+	std::vector<AllocatedImage> m_SpotlightShadows{};
+	VkSampler m_ShadowSampler;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;
@@ -130,6 +132,8 @@ private:
 	VkPipelineLayout m_CubeMapPipelineLayout;
 	VkPipeline m_MeshPipeline;
 	VkPipelineLayout m_MeshPipelineLayout;
+	VkPipeline m_ShadowMapPipeline;
+	VkPipelineLayout m_ShadowMapPipelineLayout;
 
 public:
 	void Init();
@@ -158,16 +162,21 @@ private:
 	void InitPipelines();
 	void InitCubeMapPipeline();
 	void InitMeshPipeline();
+	void InitShadowMapPipeline();
 	void InitDefaultData();
+	void InitDepthBuffers();
 
 	void UpdateDeltaTimeAndTitle();
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
 	void ResizeSwapchain();
 	void DrawMain(VkCommandBuffer cmd);
-	void DrawGeometry(VkCommandBuffer cmd);
+	void DrawGeometry(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws);
 	void DrawMesh(VkCommandBuffer cmd);
+	void DrawShadowMap(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws);
 	void DrawCubeMap(VkCommandBuffer cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
+	VkDescriptorSet SetSceneDescriptor();
+	std::vector<size_t> GetSortedOpaqueDraws();
 	void UpdateScene();
 };

@@ -1,10 +1,10 @@
 #include "vk_types.h"
 
-void DescriptorLayoutBuilder::AddBinding(uint32_t binding, VkDescriptorType type)
+void DescriptorLayoutBuilder::AddBinding(uint32_t binding, VkDescriptorType type, uint32_t count)
 {
     VkDescriptorSetLayoutBinding newbind{};
     newbind.binding = binding;
-    newbind.descriptorCount = 1;
+    newbind.descriptorCount = count;
     newbind.descriptorType = type;
 
     Bindings.push_back(newbind);
@@ -170,6 +170,30 @@ void DescriptorWriter::WriteImage(int binding, VkImageView image, VkSampler samp
     write.descriptorCount = 1;
     write.descriptorType = type;
     write.pImageInfo = &info;
+
+    Writes.push_back(write);
+}
+
+void DescriptorWriter::WriteImage(int binding, const std::vector<VkImageView>& images, VkSampler sampler, VkImageLayout layout, VkDescriptorType type)
+{
+    size_t imageInfoStartIndex = ImageInfos.size();
+
+    for (const auto& view : images)
+    {
+        ImageInfos.emplace_back(VkDescriptorImageInfo{
+            .sampler = sampler,
+            .imageView = view,
+            .imageLayout = layout
+            });
+    }
+
+    VkWriteDescriptorSet write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+
+    write.dstBinding = binding;
+    write.dstSet = VK_NULL_HANDLE; //left empty for now until we need to write it
+    write.descriptorCount = images.size();
+    write.descriptorType = type;
+    write.pImageInfo = &ImageInfos[imageInfoStartIndex];
 
     Writes.push_back(write);
 }

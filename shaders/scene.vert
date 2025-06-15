@@ -10,6 +10,7 @@ layout (location = 1) out vec3 v_Color;
 layout (location = 2) out vec2 v_UV;
 layout (location = 3) out vec4 v_WorldPos;
 layout (location = 4) out vec4 v_MetalRoughFactor;
+layout (location = 5) out vec4 v_ShadowCoord;
 
 struct Vertex
 {
@@ -33,6 +34,12 @@ layout(push_constant) uniform constants
 	vec4 OverrideColor;
 } PushConstants;
 
+const mat4 biasMat = mat4( 
+	0.5, 0.0, 0.0, 0.0,
+	0.0, 0.5, 0.0, 0.0,
+	0.0, 0.0, 1.0, 0.0,
+	0.5, 0.5, 0.0, 1.0 );
+
 void main()
 {
 	Vertex v = PushConstants.VertexBuffer.Vertices[gl_VertexIndex];
@@ -53,4 +60,5 @@ void main()
 	}
 	v_Color *= u_MaterialData.ColorFactors.rgb;
 	v_MetalRoughFactor = u_MaterialData.MetalRoughFactors;
+	v_ShadowCoord = biasMat * u_Light.SpotLights[0].LightProj * v_WorldPos;
 }

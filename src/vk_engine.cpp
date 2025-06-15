@@ -27,6 +27,7 @@ static const bool bUseValidationLayers = true;
 #endif
 
 static VkExtent2D ScreenSize{ 1920, 1080 };
+static VkExtent3D ShadowResolution{ 2048, 2048, 1 };
 
 bool isVisible(const RenderObject& obj, const glm::mat4& viewproj);
 void ImGuiDarkTheme();
@@ -48,7 +49,9 @@ void VulkanEngine::Init()
 	InitDescriptors();
 	InitPipelines();
 	InitImGui();
+	UpdateScene();	// To initialize light data for shadowmaps and descriptors
 	InitDefaultData();
+	InitDepthBuffers();
 
 	m_IsInitialized = true;
 }
@@ -177,7 +180,7 @@ void VulkanEngine::MainLoop()
 					{
 						ImGui::ColorEdit3("Position", glm::value_ptr(m_Lights.SpotLights[i].Position));
 						ImGui::ColorEdit3("Color", glm::value_ptr(m_Lights.SpotLights[i].Color));
-						ImGui::ColorEdit3("Direction", glm::value_ptr(m_Lights.SpotLights[i].Direction));
+						ImGui::SliderFloat3("Direction", glm::value_ptr(m_Lights.SpotLights[i].Direction), -1.0f, 1.0f);
 						ImGui::SliderFloat("Cutoff", &m_Lights.SpotLights[i].Cutoff, 0.0f, 1.0f);
 						ImGui::SliderFloat("OuterCutoff", &m_Lights.SpotLights[i].OuterCutoff, 0.0f, 1.0f);
 						ImGui::SliderFloat("Constant", &m_Lights.SpotLights[i].Constant, 0.0f, 1.0f);
@@ -547,7 +550,8 @@ void VulkanEngine::InitDescriptors()
 		DescriptorLayoutBuilder builder;
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		builder.AddBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		//builder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		builder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		builder.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		GPUSceneDataDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 	// Set to send mesh data to GPU
@@ -611,6 +615,7 @@ void VulkanEngine::InitPipelines()
 	// Graphics
 	InitCubeMapPipeline();
 	InitMeshPipeline();
+	InitShadowMapPipeline();
 
 	MetalRoughMaterial.BuildPipelines(this);
 }
@@ -674,11 +679,11 @@ void VulkanEngine::InitMeshPipeline()
 
 	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.frag.spv", Device, &fragShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building tex_image frag shader\n");
+		fmt::print(fmt::fg(fmt::color::red), "Error when building mesh frag shader\n");
 	}
 	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.vert.spv", Device, &vertexShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building colored_triangle vert shader\n");
+		fmt::print(fmt::fg(fmt::color::red), "Error when building mesh vert shader\n");
 	}
 
 	VkPushConstantRange bufferRange{};
@@ -715,6 +720,58 @@ void VulkanEngine::InitMeshPipeline()
 	m_MainDeletionQueue.PushFunction([&]() {
 		vkDestroyPipelineLayout(Device, m_MeshPipelineLayout, nullptr);
 		vkDestroyPipeline(Device, m_MeshPipeline, nullptr);
+		});
+}
+
+
+void VulkanEngine::InitShadowMapPipeline()
+{
+	VkShaderModule fragShader;
+	VkShaderModule vertexShader;
+
+	if (!VkUtils::loadShaderModule(SHADER_PATH "shadowmap.frag.spv", Device, &fragShader))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when building shadowmap frag shader\n");
+	}
+	if (!VkUtils::loadShaderModule(SHADER_PATH "shadowmap.vert.spv", Device, &vertexShader))
+	{
+		fmt::print(fmt::fg(fmt::color::red), "Error when building shadowmap vert shader\n");
+	}
+
+	VkPushConstantRange bufferRange{};
+	bufferRange.offset = 0;
+	bufferRange.size = sizeof(GPUDrawPushConstants);
+	bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = VkInit::pipelineLayoutCreateInfo();
+	pipelineLayoutInfo.pPushConstantRanges = &bufferRange;
+	pipelineLayoutInfo.pushConstantRangeCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &GPUSceneDataDescriptorLayout;
+	pipelineLayoutInfo.setLayoutCount = 1;
+	VK_CHECK(vkCreatePipelineLayout(Device, &pipelineLayoutInfo, nullptr, &m_ShadowMapPipelineLayout));
+
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.PipelineLayout = m_ShadowMapPipelineLayout;
+	pipelineBuilder.SetShaders(vertexShader, fragShader);
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.SetMultiSamplingNone();
+	pipelineBuilder.DisableBlending();
+	//pipelineBuilder.EnableBlendingAdditive();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	//pipelineBuilder.DisableDepthTest();
+
+	//pipelineBuilder.SetColorAttachmentFormat(DrawImage.ImageFormat);
+	pipelineBuilder.SetDepthFormat(VK_FORMAT_D32_SFLOAT);
+	m_ShadowMapPipeline = pipelineBuilder.BuildPipeline(Device);
+
+	vkDestroyShaderModule(Device, fragShader, nullptr);
+	vkDestroyShaderModule(Device, vertexShader, nullptr);
+
+	m_MainDeletionQueue.PushFunction([&]() {
+		vkDestroyPipelineLayout(Device, m_ShadowMapPipelineLayout, nullptr);
+		vkDestroyPipeline(Device, m_ShadowMapPipeline, nullptr);
 		});
 }
 
@@ -800,7 +857,8 @@ void VulkanEngine::InitDefaultData()
 	sampler.minFilter = VK_FILTER_LINEAR;
 	vkCreateSampler(Device, &sampler, nullptr, &DefaultSamplerLinear);
 
-	std::string structurePath = { ASSET_PATH "Sponza/Sponza.gltf" };
+	//std::string structurePath = { ASSET_PATH "Sponza/Sponza.gltf" };
+	std::string structurePath = { ASSET_PATH "samplescene.gltf" };
 	auto structureFile = loadGltfScene(this, structurePath);
 	assert(structureFile.has_value());
 	m_LoadedScenes["structure"] = *structureFile;
@@ -814,6 +872,39 @@ void VulkanEngine::InitDefaultData()
 		//DestroyImage(m_GreyImage);
 		//DestroyImage(m_BlackImage);
 		DestroyImage(ErrorCheckerboardImage);
+		});
+}
+
+void VulkanEngine::InitDepthBuffers()
+{	
+	m_SpotlightShadows.reserve(m_Lights.TotalSpotLights);
+
+	for (size_t i = 0; i < m_Lights.TotalSpotLights; i++)
+	{
+		m_SpotlightShadows.push_back(CreateImage(ShadowResolution, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false));
+
+		m_MainDeletionQueue.PushFunction([=]() {
+			DestroyImage(m_SpotlightShadows[i]);
+			});
+	}
+
+	VkSamplerCreateInfo sampler = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.magFilter = VK_FILTER_NEAREST,
+		.minFilter = VK_FILTER_NEAREST,
+		.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.anisotropyEnable = VK_FALSE,
+		.compareEnable = VK_FALSE,	// Setting this to true will do Hardware enabled shadows but cant do CSM or VSM
+		.compareOp = VK_COMPARE_OP_GREATER,
+		.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+		.unnormalizedCoordinates = VK_FALSE,
+	};
+
+	vkCreateSampler(Device, &sampler, nullptr, &m_ShadowSampler);
+	m_MainDeletionQueue.PushFunction([=]() {
+		vkDestroySampler(Device, m_ShadowSampler, nullptr);
 		});
 }
 
@@ -977,10 +1068,10 @@ void VulkanEngine::DrawMesh(VkCommandBuffer cmd)
 {
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
 	
-	for (uint32_t i = 0; i < m_Lights.TotalPointLights; i++)
+	for (uint32_t i = 0; i < m_Lights.TotalSpotLights; i++)
 	{
 		GPUDrawPushConstants pushConstants;
-		glm::mat4 model = glm::translate(m_Lights.PointLights[i].Position) * glm::scale(glm::vec3(0.2f));
+		glm::mat4 model = glm::translate(m_Lights.SpotLights[i].Position) * glm::scale(glm::vec3(0.2f));
 		pushConstants.WorldMatrix = m_SceneData.ViewProj * model;
 		pushConstants.VertexBufferAddress = m_Cube.VertexDeviceAddress;
 		pushConstants.OverrideColor = glm::vec4(m_Lights.PointLights[i].Color, 1.0f);
@@ -1029,6 +1120,19 @@ void VulkanEngine::DrawCubeMap(VkCommandBuffer cmd)
 
 void VulkanEngine::DrawMain(VkCommandBuffer cmd)
 {
+	auto start = std::chrono::system_clock::now();
+
+	VkDescriptorSet sceneDescriptor = SetSceneDescriptor();
+	std::vector<size_t> opaqueDraws = GetSortedOpaqueDraws();
+
+	////////////////////////////////////////////////
+	// ShadowPass
+	////////////////////////////////////////////////
+
+	DrawShadowMap(cmd, sceneDescriptor, opaqueDraws);
+
+	////////////////////////////////////////////////
+	// Drawing pass
 	////////////////////////////////////////////////
 	
 	VkRenderingAttachmentInfo colorAttachment = VkInit::attachmentInfo(DrawImage.ImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -1036,9 +1140,7 @@ void VulkanEngine::DrawMain(VkCommandBuffer cmd)
 	VkRenderingInfo renderInfo = VkInit::renderingInfo(m_DrawExtent, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(cmd, &renderInfo);
 	
-	auto start = std::chrono::system_clock::now();
-
-	DrawGeometry(cmd);
+	DrawGeometry(cmd, sceneDescriptor, opaqueDraws);
 	DrawMesh(cmd);
 	DrawCubeMap(cmd);
 
@@ -1047,56 +1149,13 @@ void VulkanEngine::DrawMain(VkCommandBuffer cmd)
 	Stats.MeshDrawTime = elapsed.count() / 1000.0f;
 
 	vkCmdEndRendering(cmd);
+
+	m_MainDrawContext.OpaqueSurfaces.clear();
+	m_MainDrawContext.TransparentSurfaces.clear();
 }
 
-void VulkanEngine::DrawGeometry(VkCommandBuffer cmd)
+void VulkanEngine::DrawGeometry(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws)
 {
-	std::vector<uint32_t> opaqueDraws;
-	opaqueDraws.reserve(m_MainDrawContext.OpaqueSurfaces.size());
-
-	for (uint32_t i = 0; i < m_MainDrawContext.OpaqueSurfaces.size(); i++)
-	{
-		//if (isVisible(m_MainDrawContext.OpaqueSurfaces[i], m_SceneData.ViewProj))
-		{
-			opaqueDraws.push_back(i);
-		}
-	}
-
-	// Sort the opaque surfaces by material and mesh
-	std::sort(opaqueDraws.begin(), opaqueDraws.end(), [&](const auto& iA, const auto& iB)
-		{
-		const RenderObject& A = m_MainDrawContext.OpaqueSurfaces[iA];
-		const RenderObject& B = m_MainDrawContext.OpaqueSurfaces[iB];
-		if (A.Material == B.Material)
-		{
-			return A.IndexBuffer < B.IndexBuffer;
-		}
-		else
-		{
-			return A.Material < B.Material;
-		}
-		});
-
-	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	AllocatedBuffer lightDataBuffer = CreateBuffer(sizeof(LightData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	GetCurrentFrame().FrameDeletionQueue.PushFunction([=, this]() {
-		DestroyBuffer(gpuSceneDataBuffer);
-		DestroyBuffer(lightDataBuffer);
-		});
-
-	GPUSceneData* sceneUniformData = (GPUSceneData*)gpuSceneDataBuffer.Allocation->GetMappedData();
-	*sceneUniformData = m_SceneData;
-	LightData* lightUniformData = (LightData*)lightDataBuffer.Allocation->GetMappedData();
-	*lightUniformData = m_Lights;
-
-	VkDescriptorSet sceneDescriptor = GetCurrentFrame().FrameDescriptors.Allocate(Device, GPUSceneDataDescriptorLayout);
-
-	DescriptorWriter writer;
-	writer.WriteBuffer(0, gpuSceneDataBuffer.Buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-	writer.WriteBuffer(1, lightDataBuffer.Buffer, sizeof(LightData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-	//writer.WriteImage(2, CubeMap.ImageView, CubeMapSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	writer.UpdateSet(Device, sceneDescriptor);
-
 	// Defined outside of the draw function, this is the state we will try to skip
 	MaterialPipeline* lastPipeline = nullptr;
 	MaterialInstance* lastMaterial = nullptr;
@@ -1167,9 +1226,58 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer cmd)
 	{
 		drawLambda(r);
 	}
+}
 
-	m_MainDrawContext.OpaqueSurfaces.clear();
-	m_MainDrawContext.TransparentSurfaces.clear();
+void VulkanEngine::DrawShadowMap(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws)
+{
+	for (size_t i = 0; i < m_Lights.TotalSpotLights; i++)
+	{
+		SpotLight light = m_Lights.SpotLights[i];
+
+		VkUtils::transitionImage(cmd, m_SpotlightShadows[i].Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
+		VkRenderingAttachmentInfo depthAttachment = VkInit::depthAttachmentInfo(m_SpotlightShadows[i].ImageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+		VkRenderingInfo renderInfo = VkInit::renderingInfo(VkExtent2D(ShadowResolution.width, ShadowResolution.height), nullptr, &depthAttachment);
+		vkCmdBeginRendering(cmd, &renderInfo);
+
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ShadowMapPipeline);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ShadowMapPipelineLayout, 0, 1,
+			&sceneDescriptor, 0, nullptr);
+
+		VkViewport viewport = {};
+		viewport.x = 0;
+		viewport.y = 0;
+		viewport.width = ShadowResolution.width;
+		viewport.height = ShadowResolution.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+		VkRect2D scissor = {};
+		scissor.offset.x = 0;
+		scissor.offset.y = 0;
+		scissor.extent.width = ShadowResolution.width;
+		scissor.extent.height = ShadowResolution.height;
+
+		vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+		for (auto& r : opaqueDraws)
+		{
+			const RenderObject& draw = m_MainDrawContext.OpaqueSurfaces[r];
+			vkCmdBindIndexBuffer(cmd, draw.IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+			GPUDrawPushConstants pushConstants;
+			pushConstants.VertexBufferAddress = draw.VertexBufferAddress;
+			pushConstants.WorldMatrix = light.LightProj * draw.Transform;
+			pushConstants.OverrideColor = glm::vec4(0.0f);
+
+			vkCmdPushConstants(cmd, m_ShadowMapPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+			vkCmdDrawIndexed(cmd, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
+		}
+		vkCmdEndRendering(cmd);
+		VkUtils::transitionImage(cmd, m_SpotlightShadows[i].Image, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL);
+	}
 }
 
 void VulkanEngine::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
@@ -1184,11 +1292,68 @@ void VulkanEngine::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
 	vkCmdEndRendering(cmd);
 }
 
+VkDescriptorSet VulkanEngine::SetSceneDescriptor()
+{
+	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	AllocatedBuffer lightDataBuffer = CreateBuffer(sizeof(LightData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	GetCurrentFrame().FrameDeletionQueue.PushFunction([=, this]() {
+		DestroyBuffer(gpuSceneDataBuffer);
+		DestroyBuffer(lightDataBuffer);
+		});
+
+	GPUSceneData* sceneUniformData = (GPUSceneData*)gpuSceneDataBuffer.Allocation->GetMappedData();
+	*sceneUniformData = m_SceneData;
+	LightData* lightUniformData = (LightData*)lightDataBuffer.Allocation->GetMappedData();
+	*lightUniformData = m_Lights;
+
+	VkDescriptorSet sceneDescriptor = GetCurrentFrame().FrameDescriptors.Allocate(Device, GPUSceneDataDescriptorLayout);
+
+	DescriptorWriter writer;
+	writer.WriteBuffer(0, gpuSceneDataBuffer.Buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	writer.WriteBuffer(1, lightDataBuffer.Buffer, sizeof(LightData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	writer.WriteImage(2, CubeMap.ImageView, CubeMapSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.WriteImage(3, m_SpotlightShadows[0].ImageView, m_ShadowSampler, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.UpdateSet(Device, sceneDescriptor);
+
+	return sceneDescriptor;
+}
+
+std::vector<size_t> VulkanEngine::GetSortedOpaqueDraws()
+{
+	std::vector<size_t> opaqueDraws;
+	opaqueDraws.reserve(m_MainDrawContext.OpaqueSurfaces.size());
+
+	for (size_t i = 0; i < m_MainDrawContext.OpaqueSurfaces.size(); i++)
+	{
+		//if (isVisible(m_MainDrawContext.OpaqueSurfaces[i], m_SceneData.ViewProj))
+		{
+			opaqueDraws.push_back(i);
+		}
+	}
+
+	// Sort the opaque surfaces by material and mesh
+	std::sort(opaqueDraws.begin(), opaqueDraws.end(), [&](const auto& iA, const auto& iB)
+		{
+			const RenderObject& A = m_MainDrawContext.OpaqueSurfaces[iA];
+			const RenderObject& B = m_MainDrawContext.OpaqueSurfaces[iB];
+			if (A.Material == B.Material)
+			{
+				return A.IndexBuffer < B.IndexBuffer;
+			}
+			else
+			{
+				return A.Material < B.Material;
+			}
+		});
+
+	return opaqueDraws;
+}
+
 void VulkanEngine::UpdateDeltaTimeAndTitle()
 {
 	// Update Title
 	static float lastTime = 0.0f;
-	static uint32_t nFrames = 0;
+	static size_t nFrames = 0;
 
 	float currentTime = static_cast<float>(glfwGetTime());
 	m_TitleUpdateTime = currentTime - lastTime;
@@ -1196,9 +1361,9 @@ void VulkanEngine::UpdateDeltaTimeAndTitle()
 
 	if (m_TitleUpdateTime >= 1.0)
 	{
-		uint32_t fps = static_cast<uint32_t>(nFrames / m_TitleUpdateTime);
+		size_t fps = static_cast<size_t>(nFrames / m_TitleUpdateTime);
 
-		float delay = static_cast<uint32_t>(100'000.0f / nFrames) / 100.0f;
+		float delay = static_cast<size_t>(100'000.0f / nFrames) / 100.0f;
 
 		std::stringstream ss;
 		ss << "Vulkan Engine" << "    [FPS: " << fps << "]     " << "[" << delay << " ms]";
@@ -1275,7 +1440,7 @@ void VulkanEngine::InitImGui()
 
 	ImGui_ImplVulkan_Init(&init_info);
 
-	ImGui_ImplVulkan_CreateFontsTexture();
+	//ImGui_ImplVulkan_CreateFontsTexture();
 
 	// add the destroy the imgui created structures
 	m_MainDeletionQueue.PushFunction([=]() {
@@ -1457,7 +1622,6 @@ void VulkanEngine::UpdateScene()
 	m_SceneData.CameraPosition = glm::vec4(m_Camera.GetCameraPosition(), 1.0);
 	m_SceneData.Time = glfwGetTime();
 
-
 	auto ParamRectangleTrace = [](glm::vec2 pMin, glm::vec2 pMax, float t, bool clockwise) -> glm::vec2 {
 
 		// Normalize time to [0, 1]
@@ -1522,19 +1686,43 @@ void VulkanEngine::UpdateScene()
 	//}
 
 	// Spot lights
-	lightLocations = {  };
+	lightLocations = { glm::vec3(0.0f, 14.0f, 0.0f) };
 	//lightLocations = { m_SceneData.CameraPosition };
+
+	float fov = 70.0f;
+	float zNear = 1.0f;
+	float zFar = 50.0f;
+
+	glm::mat4 proj = glm::perspective(glm::radians(fov), 1.0f, zFar, zNear);
+	proj[1][1] *= -1.0f;
 
 	for (size_t i = 0; i < lightLocations.size(); i++)
 	{
 		SpotLight& light = m_Lights.SpotLights[i];
-		light.Position = lightLocations[i];
+		light.Position = lightLocations[i] + glm::vec3(4.0f * sin(glfwGetTime() * lightSpeed), 0.0f, 4.0f * cos(glfwGetTime() * lightSpeed));
 		// This is forward vector and hopefully this direction is already normalized
-		light.Direction = { m_SceneData.View[0][2], m_SceneData.View[1][2], m_SceneData.View[2][2] };
+		//light.Direction = { m_SceneData.View[0][2], m_SceneData.View[1][2], m_SceneData.View[2][2] };
+		
+		// The direction vector goes away from the light source
+		glm::vec3 dir = glm::normalize(light.Direction);
+		if (glm::abs(glm::dot(dir, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.999f)
+		{
+			// Nudge the direction slightly in the X axis
+			dir.x += 0.001f;
+			dir = glm::normalize(dir);
+		}
+
+		glm::mat4 lightView = glm::lookAt(light.Position, light.Position + dir, glm::vec3(0.0f, 1.0f, 0.0f));
+		light.LightProj = proj * lightView;
 	}
 	m_Lights.TotalSpotLights = lightLocations.size();
 
+	// Some workaroud when running this function for first time and doing init light data
+	if (m_LoadedScenes.find("structure") == m_LoadedScenes.end())
+		return;
+
 	m_LoadedScenes["structure"]->Draw(glm::mat4{ 1.0f }, m_MainDrawContext);
+	//fmt::print(fmt::fg(fmt::color::yellow) | fmt::bg(fmt::color::black), "{}\n", sizeof(LightData));
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);

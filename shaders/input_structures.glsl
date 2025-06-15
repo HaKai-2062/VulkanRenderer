@@ -7,6 +7,7 @@ struct PointLight
 	float Intensity;
 	vec3 Color;
 	int Padding;
+	mat4 LightProj;
 };
 
 struct Directional
@@ -15,6 +16,7 @@ struct Directional
 	float Intensity;
 	vec3 Color;
 	int Padding;
+	mat4 LightProj;
 };
 
 struct SpotLight
@@ -28,6 +30,7 @@ struct SpotLight
 	float Linear;
 	float Quadratic;
 	vec2 Padding;
+	mat4 LightProj;
 };
 
 layout(set = 0, binding = 0) uniform  SceneData{   
@@ -40,7 +43,7 @@ layout(set = 0, binding = 0) uniform  SceneData{
 	vec3 Padding;
 } u_SceneData;
 
-layout(set = 0, binding = 1) uniform  LightData{   
+layout(set = 0, binding = 1) uniform LightData{   
 	Directional DirectionalLight;
 	PointLight PointLights[MAX_POINT_LIGHTS];
 	SpotLight SpotLights[MAX_SPOT_LIGHTS];
@@ -49,6 +52,9 @@ layout(set = 0, binding = 1) uniform  LightData{
 	int TotalSpotLights;
 	vec2 Padding;
 } u_Light;
+
+layout(set = 0, binding = 2) uniform sampler2D u_CubeMap;
+layout(set = 0, binding = 3) uniform sampler2D u_SpotLightShadowMap;
 
 layout(set = 1, binding = 0) uniform GLTFMaterialData{
 	vec4 ColorFactors;
