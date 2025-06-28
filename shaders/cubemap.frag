@@ -1,6 +1,6 @@
 #version 450
 
-layout (binding = 0) uniform samplerCube u_CubeMapSampler;
+layout (set = 0, binding = 0) uniform samplerCube u_CubeMapSampler;
 layout (location = 0) in vec3 v_SampleDir;
 layout (location = 0) out vec4 FragColor;
 

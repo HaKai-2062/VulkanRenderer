@@ -55,6 +55,7 @@ layout(set = 0, binding = 1) uniform LightData{
 
 layout(set = 0, binding = 2) uniform sampler2D u_CubeMap;
 layout(set = 0, binding = 3) uniform sampler2D u_SpotLightShadowMap;
+layout(set = 0, binding = 4) uniform sampler2D u_DirectionalShadowMap;
 
 layout(set = 1, binding = 0) uniform GLTFMaterialData{
 	vec4 ColorFactors;

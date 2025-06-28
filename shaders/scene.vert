@@ -10,7 +10,8 @@ layout (location = 1) out vec3 v_Color;
 layout (location = 2) out vec2 v_UV;
 layout (location = 3) out vec4 v_WorldPos;
 layout (location = 4) out vec4 v_MetalRoughFactor;
-layout (location = 5) out vec4 v_ShadowCoord;
+layout (location = 5) out vec4 v_DirShadowCoord;
+layout (location = 6) out vec4 v_SpotShadowCoord;
 
 struct Vertex
 {
@@ -34,6 +35,7 @@ layout(push_constant) uniform constants
 	vec4 OverrideColor;
 } PushConstants;
 
+// Scale by 0.5 and translate 0.5 to trasform -1:1 to 0:1
 const mat4 biasMat = mat4( 
 	0.5, 0.0, 0.0, 0.0,
 	0.0, 0.5, 0.0, 0.0,
@@ -60,5 +62,6 @@ void main()
 	}
 	v_Color *= u_MaterialData.ColorFactors.rgb;
 	v_MetalRoughFactor = u_MaterialData.MetalRoughFactors;
-	v_ShadowCoord = biasMat * u_Light.SpotLights[0].LightProj * v_WorldPos;
+	v_DirShadowCoord = biasMat * u_Light.DirectionalLight.LightProj * v_WorldPos;
+	v_SpotShadowCoord = biasMat * u_Light.SpotLights[0].LightProj * v_WorldPos;
 }

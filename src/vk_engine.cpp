@@ -552,6 +552,7 @@ void VulkanEngine::InitDescriptors()
 		builder.AddBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		builder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		builder.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		builder.AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		GPUSceneDataDescriptorLayout = builder.Build(Device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 	// Set to send mesh data to GPU
@@ -888,6 +889,8 @@ void VulkanEngine::InitDepthBuffers()
 			});
 	}
 
+	m_DirectionalShadow = CreateImage(ShadowResolution, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
+
 	VkSamplerCreateInfo sampler = {
 		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
 		.magFilter = VK_FILTER_NEAREST,
@@ -904,6 +907,7 @@ void VulkanEngine::InitDepthBuffers()
 
 	vkCreateSampler(Device, &sampler, nullptr, &m_ShadowSampler);
 	m_MainDeletionQueue.PushFunction([=]() {
+		DestroyImage(m_DirectionalShadow);
 		vkDestroySampler(Device, m_ShadowSampler, nullptr);
 		});
 }
@@ -1068,10 +1072,10 @@ void VulkanEngine::DrawMesh(VkCommandBuffer cmd)
 {
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
 	
-	for (uint32_t i = 0; i < m_Lights.TotalSpotLights; i++)
+	for (uint32_t i = 0; i < m_Lights.TotalPointLights; i++)
 	{
 		GPUDrawPushConstants pushConstants;
-		glm::mat4 model = glm::translate(m_Lights.SpotLights[i].Position) * glm::scale(glm::vec3(0.2f));
+		glm::mat4 model = glm::translate(m_Lights.PointLights[i].Position) * glm::scale(glm::vec3(0.2f));
 		pushConstants.WorldMatrix = m_SceneData.ViewProj * model;
 		pushConstants.VertexBufferAddress = m_Cube.VertexDeviceAddress;
 		pushConstants.OverrideColor = glm::vec4(m_Lights.PointLights[i].Color, 1.0f);
@@ -1230,6 +1234,7 @@ void VulkanEngine::DrawGeometry(VkCommandBuffer cmd, VkDescriptorSet sceneDescri
 
 void VulkanEngine::DrawShadowMap(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws)
 {
+	// Draw to spotlight shadowmap
 	for (size_t i = 0; i < m_Lights.TotalSpotLights; i++)
 	{
 		SpotLight light = m_Lights.SpotLights[i];
@@ -1278,6 +1283,55 @@ void VulkanEngine::DrawShadowMap(VkCommandBuffer cmd, VkDescriptorSet sceneDescr
 		vkCmdEndRendering(cmd);
 		VkUtils::transitionImage(cmd, m_SpotlightShadows[i].Image, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL);
 	}
+
+	// Draw to directional light shadowmap
+	{
+		Directional light = m_Lights.DirectionalLight;
+
+		VkUtils::transitionImage(cmd, m_DirectionalShadow.Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
+		VkRenderingAttachmentInfo depthAttachment = VkInit::depthAttachmentInfo(m_DirectionalShadow.ImageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+		VkRenderingInfo renderInfo = VkInit::renderingInfo(VkExtent2D(ShadowResolution.width, ShadowResolution.height), nullptr, &depthAttachment);
+		vkCmdBeginRendering(cmd, &renderInfo);
+
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ShadowMapPipeline);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_ShadowMapPipelineLayout, 0, 1,
+			&sceneDescriptor, 0, nullptr);
+
+		VkViewport viewport = {};
+		viewport.x = 0;
+		viewport.y = 0;
+		viewport.width = ShadowResolution.width;
+		viewport.height = ShadowResolution.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+		VkRect2D scissor = {};
+		scissor.offset.x = 0;
+		scissor.offset.y = 0;
+		scissor.extent.width = ShadowResolution.width;
+		scissor.extent.height = ShadowResolution.height;
+
+		vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+		for (auto& r : opaqueDraws)
+		{
+			const RenderObject& draw = m_MainDrawContext.OpaqueSurfaces[r];
+			vkCmdBindIndexBuffer(cmd, draw.IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+			GPUDrawPushConstants pushConstants;
+			pushConstants.VertexBufferAddress = draw.VertexBufferAddress;
+			pushConstants.WorldMatrix = light.LightProj * draw.Transform;
+			pushConstants.OverrideColor = glm::vec4(0.0f);
+
+			vkCmdPushConstants(cmd, m_ShadowMapPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+			vkCmdDrawIndexed(cmd, draw.IndexCount, 1, draw.FirstIndex, 0, 0);
+		}
+		vkCmdEndRendering(cmd);
+		VkUtils::transitionImage(cmd, m_DirectionalShadow.Image, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL);
+	}
 }
 
 void VulkanEngine::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
@@ -1312,7 +1366,9 @@ VkDescriptorSet VulkanEngine::SetSceneDescriptor()
 	writer.WriteBuffer(0, gpuSceneDataBuffer.Buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	writer.WriteBuffer(1, lightDataBuffer.Buffer, sizeof(LightData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	writer.WriteImage(2, CubeMap.ImageView, CubeMapSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	writer.WriteImage(3, m_SpotlightShadows[0].ImageView, m_ShadowSampler, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	if (m_Lights.TotalSpotLights > 0)
+		writer.WriteImage(3, m_SpotlightShadows[0].ImageView, m_ShadowSampler, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.WriteImage(4, m_DirectionalShadow.ImageView, m_ShadowSampler, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	writer.UpdateSet(Device, sceneDescriptor);
 
 	return sceneDescriptor;
@@ -1659,63 +1715,71 @@ void VulkanEngine::UpdateScene()
 	glm::vec2 light1XZ = ParamRectangleTrace({ -9.5f, -3.3f }, { 9.5f, 3.3f }, glfwGetTime() * 0.2f, true);
 	glm::vec2 light2XZ = ParamRectangleTrace({ -9.5f, -3.3f }, { 9.5f, 3.3f }, glfwGetTime() * 0.2f, false);
 
-	// Point lights
 	float lightSpeed = 1.0f;
-	std::vector<glm::vec3> lightLocations = {  };
-	//std::vector<glm::vec3> lightLocations = { glm::vec3(-8.0f, 8.5f, 0.0f), glm::vec3(33.0f, 8.5f, 0.0f) };
-	//std::vector lightLocations = { glm::vec3(light1XZ.x, 2.0f, light1XZ.y) , glm::vec3(light2XZ.x, 5.0f, light2XZ.y) };
-	for (size_t i = 0; i < lightLocations.size(); i++)
+	// Point lights
 	{
-		PointLight& light = m_Lights.PointLights[i];
-		//light.Position = lightLocations[i] + glm::vec3(8.0f * sin(glfwGetTime() * lightSpeed), 0.0f, 9.0f * cos(glfwGetTime() * lightSpeed));
-		light.Position = lightLocations[i];
-		light.Color = glm::vec3(sin(glfwGetTime() * 0.6) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 2.094) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 4.188) * 0.5 + 0.5);
+		std::vector<glm::vec3> lightLocations = {  };
+		//std::vector<glm::vec3> lightLocations = { glm::vec3(-8.0f, 8.5f, 0.0f), glm::vec3(33.0f, 8.5f, 0.0f) };
+		//std::vector lightLocations = { glm::vec3(light1XZ.x, 2.0f, light1XZ.y) , glm::vec3(light2XZ.x, 5.0f, light2XZ.y) };
+		for (size_t i = 0; i < lightLocations.size(); i++)
+		{
+			PointLight& light = m_Lights.PointLights[i];
+			//light.Position = lightLocations[i] + glm::vec3(8.0f * sin(glfwGetTime() * lightSpeed), 0.0f, 9.0f * cos(glfwGetTime() * lightSpeed));
+			light.Position = lightLocations[i];
+			light.Color = glm::vec3(sin(glfwGetTime() * 0.6) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 2.094) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 4.188) * 0.5 + 0.5);
+		}
+		m_Lights.TotalPointLights = lightLocations.size();
 	}
-	m_Lights.TotalPointLights = lightLocations.size();
 
 	// Directional Lights
-	m_Lights.DirectionalLight.Direction = glm::normalize(m_DirectionalLightDir);
-	//m_Lights.DirectionalLight.Color = glm::vec3(1.0f, 1.0f, 1.0f);
-	//for (int x = -3; x < 3; x++)
-	//{
+	{
+		float zNear = 1.0f;
+		float zFar = 30.0f;
+		float cubeSize = 40.0f;
 
-	//	glm::mat4 scale = glm::scale(glm::vec3{ 0.2f });
-	//	glm::mat4 translation = glm::translate(glm::vec3{ x, 1.0f, 0.0f });
+		m_Lights.DirectionalLight.Direction = glm::normalize(m_DirectionalLightDir);
 
-	//	m_LoadedNodes["Cube"]->Draw(translation * scale, m_MainDrawContext);
-	//}
+		glm::mat4 dirlightMatrix = glm::lookAt(glm::vec3(10.1f, 12.76f, -0.13f), glm::vec3(10.1f, 12.76f, -0.13f) + m_Lights.DirectionalLight.Direction, glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 dirProjMatrix = glm::ortho(-cubeSize, cubeSize, -cubeSize, cubeSize, zFar, zNear);
+		dirProjMatrix[1][1] *= -1.0f;
+		m_Lights.DirectionalLight.LightProj = dirProjMatrix * dirlightMatrix;
+	}
 
 	// Spot lights
-	lightLocations = { glm::vec3(0.0f, 14.0f, 0.0f) };
-	//lightLocations = { m_SceneData.CameraPosition };
-
-	float fov = 70.0f;
-	float zNear = 1.0f;
-	float zFar = 50.0f;
-
-	glm::mat4 proj = glm::perspective(glm::radians(fov), 1.0f, zFar, zNear);
-	proj[1][1] *= -1.0f;
-
-	for (size_t i = 0; i < lightLocations.size(); i++)
 	{
-		SpotLight& light = m_Lights.SpotLights[i];
-		light.Position = lightLocations[i] + glm::vec3(4.0f * sin(glfwGetTime() * lightSpeed), 0.0f, 4.0f * cos(glfwGetTime() * lightSpeed));
-		// This is forward vector and hopefully this direction is already normalized
-		//light.Direction = { m_SceneData.View[0][2], m_SceneData.View[1][2], m_SceneData.View[2][2] };
-		
-		// The direction vector goes away from the light source
-		glm::vec3 dir = glm::normalize(light.Direction);
-		if (glm::abs(glm::dot(dir, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.999f)
-		{
-			// Nudge the direction slightly in the X axis
-			dir.x += 0.001f;
-			dir = glm::normalize(dir);
-		}
+		//std::vector<glm::vec3> lightLocations = { };
+		std::vector<glm::vec3> lightLocations = { glm::vec3(0.0f, 14.0f, 0.0f) };
+		//std::vector<glm::vec3> lightLocations = { m_SceneData.CameraPosition };
 
-		glm::mat4 lightView = glm::lookAt(light.Position, light.Position + dir, glm::vec3(0.0f, 1.0f, 0.0f));
-		light.LightProj = proj * lightView;
+		float fov = 70.0f;
+		float zNear = 1.0f;
+		float zFar = 50.0f;
+
+		glm::mat4 proj = glm::perspective(glm::radians(fov), 1.0f, zFar, zNear);
+		proj[1][1] *= -1.0f;
+
+		for (size_t i = 0; i < lightLocations.size(); i++)
+		{
+			SpotLight& light = m_Lights.SpotLights[i];
+			light.Position = lightLocations[i];
+			// This is forward vector and hopefully this direction is already normalized
+			//light.Direction = { -m_SceneData.View[0][2], -m_SceneData.View[1][2], -m_SceneData.View[2][2] };
+
+			// The direction vector goes away from the light source
+			glm::vec3 dir = glm::normalize(light.Direction);
+			if (glm::abs(glm::dot(dir, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.999f)
+			{
+				// Nudge the direction slightly in the X axis
+				dir.x += 0.001f;
+				dir = glm::normalize(dir);
+			}
+
+			glm::mat4 lightView = glm::lookAt(light.Position, light.Position + dir, glm::vec3(0.0f, 1.0f, 0.0f));
+			light.LightProj = proj * lightView;
+			//light.LightProj = proj * m_SceneData.View;
+		}
+		m_Lights.TotalSpotLights = lightLocations.size();
 	}
-	m_Lights.TotalSpotLights = lightLocations.size();
 
 	// Some workaroud when running this function for first time and doing init light data
 	if (m_LoadedScenes.find("structure") == m_LoadedScenes.end())

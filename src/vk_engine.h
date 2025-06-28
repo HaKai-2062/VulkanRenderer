@@ -84,7 +84,7 @@ private:
 	struct GLFWwindow* m_Window{ nullptr };
 	std::vector<ComputeEffect> m_BGEffects;
 	int m_CurrentBGEffect{ 1 };
-	glm::vec3 m_DirectionalLightDir{ 0.1f, 0.3f, 0.0f };
+	glm::vec3 m_DirectionalLightDir{ -0.63f, -0.778f, 0.02f };
 
 	VkExtent2D m_DrawExtent;
 	float m_RenderScale = 1.0f;
@@ -110,6 +110,7 @@ private:
 	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> m_LoadedScenes;
 	std::vector<AllocatedImage> m_SpotlightShadows{};
 	VkSampler m_ShadowSampler;
+	AllocatedImage m_DirectionalShadow;
 
 	VkQueue m_GraphicsQueue;
 	uint32_t m_GraphicsQueueFamily;

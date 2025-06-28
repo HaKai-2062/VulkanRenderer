@@ -173,7 +173,7 @@ struct PointLight
 
 struct Directional
 {
-	glm::vec3 Direction;
+	glm::vec3 Direction = {-0.5f, -0.5f, 0.0f};
 	float Intensity = 1.0f;
 	glm::vec3 Color{ 1.0f };
 	uint32_t Padding;

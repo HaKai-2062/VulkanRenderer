@@ -8,7 +8,8 @@ layout (location = 1) in vec3 v_Color;
 layout (location = 2) in vec2 v_UV;
 layout (location = 3) in vec4 v_WorldPos;
 layout (location = 4) in vec4 v_MetalRoughFactor;
-layout (location = 5) in vec4 v_ShadowCoord;
+layout (location = 5) in vec4 v_DirShadowCoord;
+layout (location = 6) in vec4 v_SpotShadowCoord;
 
 layout (location = 0) out vec4 FragColor;
 
@@ -105,7 +106,7 @@ vec3 calculateLightContribution(vec3 N, vec3 V, vec3 L, vec3 F0, vec3 radiance, 
     return (kD * albedo / PI + specular) * radiance * NdotL;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
 }
 
-float shadowProj(vec4 shadowCoord, vec2 off)
+float shadowProj(sampler2D shadowMap, vec4 shadowCoord, vec2 off)
 {
 	float shadow = 1.0;
     if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0 || shadowCoord.y < 0.0 || shadowCoord.y > 1.0 || shadowCoord.z > 1.0)
@@ -114,8 +115,8 @@ float shadowProj(vec4 shadowCoord, vec2 off)
 
 	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) 
 	{
-		float dist = texture(u_SpotLightShadowMap, shadowCoord.st + off).r;
-        dist -= 0.001f;  // Bias
+		float dist = texture(shadowMap, shadowCoord.st + off).r;
+        dist -= 0.01f;  // Bias
 
         // Shouldnt the dist < z be the check in reverse z buffer setup?
 		if (shadowCoord.w > 0.0 && dist > shadowCoord.z)
@@ -124,6 +125,29 @@ float shadowProj(vec4 shadowCoord, vec2 off)
 		}
 	}
 	return shadow;
+}
+
+float filterPCF(sampler2D shadowMap, vec4 shadowCoord)
+{
+	ivec2 texDim = textureSize(shadowMap, 0);
+	float scale = 1.5;
+	float dx = scale * 1.0 / float(texDim.x);
+	float dy = scale * 1.0 / float(texDim.y);
+
+	float shadowFactor = 0.0;
+	int count = 0;
+	int range = 1;
+	
+	for (int x = -range; x <= range; x++)
+	{
+		for (int y = -range; y <= range; y++)
+		{
+			shadowFactor += shadowProj(shadowMap, shadowCoord, vec2(dx*x, dy*y));
+			count++;
+		}
+	
+	}
+	return shadowFactor / count;
 }
 
 // ----------------------------------------------------------------------------
@@ -144,10 +168,13 @@ void main()
 
     // reflectance equation
     vec3 Lo = vec3(0.0);
-    float shadow = shadowProj(v_ShadowCoord / v_ShadowCoord.w, vec2(0.0f));
+    //float directionalShadow = shadowProj(u_DirectionalShadowMap, v_DirShadowCoord / v_DirShadowCoord.w, vec2(0.0f));
+    //float spotlightShadow = shadowProj(u_SpotLightShadowMap, v_SpotShadowCoord / v_SpotShadowCoord.w, vec2(0.0f));
+    float directionalShadow = filterPCF(u_DirectionalShadowMap, v_DirShadowCoord / v_DirShadowCoord.w);
+    float spotlightShadow = filterPCF(u_SpotLightShadowMap, v_SpotShadowCoord / v_SpotShadowCoord.w);
 
     // Point lights
-    for(int i = 0; i < u_Light.TotalPointLights; ++i)
+    for (int i = 0; i < u_Light.TotalPointLights; ++i)
     {
         PointLight pointLight = u_Light.PointLights[i];
 
@@ -166,10 +193,10 @@ void main()
     Directional dirLight = u_Light.DirectionalLight;
     if (dirLight.Intensity > 0.01f)
     {
-        vec3 L = dirLight.Direction; // Normalize it before passing
+        vec3 L = -dirLight.Direction; // Normalize it before passing
         vec3 radiance = dirLight.Color * dirLight.Intensity;
     
-        Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic);
+        Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic) * directionalShadow;
     }
     // Spotlight
     for(int i = 0; i < u_Light.TotalSpotLights; ++i)
@@ -190,7 +217,7 @@ void main()
             float intensity = clamp((theta - spotLight.OuterCutoff) / epsilon, 0.0, 1.0);
             vec3 radiance = spotLight.Color * attenuation * intensity;
         
-            Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic);
+            Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic) * spotlightShadow;
         }
     }
     
@@ -198,7 +225,7 @@ void main()
     // this ambient lighting with environment lighting).
     vec3 ambient = u_SceneData.AmbientColor.rgb * albedo * ao;
     
-    vec3 color = ambient + Lo * shadow;
+    vec3 color = ambient + Lo;
     
     // HDR tonemapping
     color = color / (color + vec3(1.0));
