@@ -1,39 +1,7 @@
 #define MAX_POINT_LIGHTS 8
 #define MAX_SPOT_LIGHTS 8
 
-struct PointLight
-{
-	vec3 Position;
-	float Intensity;
-	vec3 Color;
-	int Padding;
-	mat4 LightProj;
-};
-
-struct Directional
-{
-	vec3 Direction;
-	float Intensity;
-	vec3 Color;
-	int Padding;
-	mat4 LightProj;
-};
-
-struct SpotLight
-{
-	vec3 Position;
-	float Cutoff;
-	vec3 Direction;
-	float OuterCutoff;
-	vec3 Color;
-	float Constant;
-	float Linear;
-	float Quadratic;
-	vec2 Padding;
-	mat4 LightProj;
-};
-
-layout(set = 0, binding = 0) uniform  SceneData{   
+layout(std140, set = 0, binding = 0) uniform SceneData{   
 	mat4 View;
 	mat4 Proj;
 	mat4 ViewProj;
@@ -43,21 +11,30 @@ layout(set = 0, binding = 0) uniform  SceneData{
 	vec3 Padding;
 } u_SceneData;
 
-layout(set = 0, binding = 1) uniform LightData{   
-	Directional DirectionalLight;
-	PointLight PointLights[MAX_POINT_LIGHTS];
-	SpotLight SpotLights[MAX_SPOT_LIGHTS];
+struct Light
+{
+	vec3 Position;
+	// 0 is PointLight, 1 is SpotLight, 2 is DirectionalLight
+	int Type;
+	vec3 Direction;
+	float Intensity;
+	vec4 Color;
+	mat4 LightProj;
+};
 
+layout(std430, set = 0, binding = 1) readonly buffer LightData{   
+	int Count;
 	int TotalPointLights;
 	int TotalSpotLights;
-	vec2 Padding;
+	int TotalDirectionalLights;
+	Light Lights[];
 } u_Light;
 
 layout(set = 0, binding = 2) uniform sampler2D u_CubeMap;
 layout(set = 0, binding = 3) uniform sampler2D u_SpotLightShadowMap;
 layout(set = 0, binding = 4) uniform sampler2D u_DirectionalShadowMap;
 
-layout(set = 1, binding = 0) uniform GLTFMaterialData{
+layout(std140, set = 1, binding = 0) uniform GLTFMaterialData{
 	vec4 ColorFactors;
 	vec4 MetalRoughFactors;
 } u_MaterialData;

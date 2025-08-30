@@ -62,6 +62,6 @@ void main()
 	}
 	v_Color *= u_MaterialData.ColorFactors.rgb;
 	v_MetalRoughFactor = u_MaterialData.MetalRoughFactors;
-	v_DirShadowCoord = biasMat * u_Light.DirectionalLight.LightProj * v_WorldPos;
-	v_SpotShadowCoord = biasMat * u_Light.SpotLights[0].LightProj * v_WorldPos;
+	v_DirShadowCoord = biasMat * u_Light.Lights[u_Light.Count-1].LightProj * v_WorldPos;
+	v_SpotShadowCoord = biasMat * u_Light.Lights[u_Light.TotalPointLights].LightProj * v_WorldPos;
 }

@@ -162,47 +162,24 @@ struct GPUSceneData
 	glm::vec3 Padding;
 };
 
-struct PointLight
+struct alignas(16) Light
 {
-	glm::vec3 Position;
-	float Intensity = 10.0f;
-	glm::vec3 Color{ 1.0f };
-	uint32_t Padding;
-	glm::mat4 LightProj;
-};
-
-struct Directional
-{
-	glm::vec3 Direction = {-0.5f, -0.5f, 0.0f};
-	float Intensity = 1.0f;
-	glm::vec3 Color{ 1.0f };
-	uint32_t Padding;
-	glm::mat4 LightProj;
-};
-
-struct SpotLight
-{
-	glm::vec3 Position;
-	float Cutoff = std::cos(glm::radians(25.0f));
+	glm::vec3 Position = { 0.0f, -1.0, 0.0f };
+	// 0 is PointLight, 1 is SpotLight, 2 is DirectionalLight
+	int Type;
 	glm::vec3 Direction = { 0.0f, -1.0, 0.0f };
-	float OuterCutoff = std::cos(glm::radians(35.0f));
-	glm::vec3 Color = glm::vec3(1.0f);
-	float Constant = 1.0f;
-	float Linear = 0.09f;
-	float Quadratic = 0.032f;
-	glm::vec2 Padding;
+	float Intensity = 1.0f;
+	glm::vec4 Color = glm::vec4(1.0f);
 	glm::mat4 LightProj;
 };
 
-struct LightData
+struct alignas(16) LightData
 {
-	Directional DirectionalLight;
-	PointLight PointLights[MAX_POINT_LIGHTS];
-	SpotLight SpotLights[MAX_SPOT_LIGHTS];
-
-	uint32_t TotalPointLights;
-	uint32_t TotalSpotLights;
-	glm::vec2 Padding;
+	int Count = 0;
+	int TotalPointLights = 0;
+	int TotalSpotLights = 0;
+	int TotalDirectionalLights = 0;
+	std::vector<Light> Lights;
 };
 
 enum class MaterialPass : uint8_t

@@ -163,7 +163,7 @@ void main()
 
     // calculate reflectance at normal incidence; if dia-electric (like plastic) use F0 
     // of 0.04 and if it's a metal, use the albedo color as F0 (metallic workflow)    
-    vec3 F0 = vec3(0.04); 
+    vec3 F0 = vec3(0.04);
     F0 = mix(F0, albedo, metallic);
 
     // reflectance equation
@@ -176,46 +176,59 @@ void main()
     // Point lights
     for (int i = 0; i < u_Light.TotalPointLights; ++i)
     {
-        PointLight pointLight = u_Light.PointLights[i];
+        Light pointLight = u_Light.Lights[i];
+        float intensity = u_Light.Lights[i].Intensity;
 
-        if (pointLight.Intensity > 0.01f)
+        if (intensity > 0.01f)
         {
             vec3 fragToLight = pointLight.Position - v_WorldPos.xyz;
             vec3 L = normalize(fragToLight);
             float distance = length(fragToLight);
             float attenuation = 1.0 / (distance * distance);
-            vec3 radiance = pointLight.Color * pointLight.Intensity * attenuation;
+            vec3 radiance = pointLight.Color.xyz * intensity * attenuation;
     
             Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic);
         }
     }
     // Directional Light
-    Directional dirLight = u_Light.DirectionalLight;
-    if (dirLight.Intensity > 0.01f)
+    if (u_Light.TotalDirectionalLights != 0)
     {
-        vec3 L = -dirLight.Direction; // Normalize it before passing
-        vec3 radiance = dirLight.Color * dirLight.Intensity;
+        Light dirLight = u_Light.Lights[u_Light.Count-1];
+        float intensity = u_Light.Lights[u_Light.Count-1].Intensity;
+
+        if (intensity > 0.01f)
+        {
+            vec3 L = -dirLight.Direction; // Normalize it before passing
+            vec3 radiance = dirLight.Color.xyz * intensity;
     
-        Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic) * directionalShadow;
+            Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic) * directionalShadow;
+        }
     }
     // Spotlight
     for(int i = 0; i < u_Light.TotalSpotLights; ++i)
     {
-        SpotLight spotLight = u_Light.SpotLights[i];
+        Light spotLight = u_Light.Lights[u_Light.TotalPointLights+i];
+        //float intensity = u_Light.Lights[u_Light.TotalPointLights+i].Intensity;
 
-        if (spotLight.Constant + spotLight.Linear + spotLight.Quadratic > 0.01f)
+        float Constant = 1.0f;
+	    float Linear = 0.09f;
+	    float Quadratic = 0.032f;
+        float Cutoff = cos(radians(25.0f));
+        float OuterCutoff = cos(radians(35.0f));
+
+        if (Constant + Linear + Quadratic > 0.01f)
         {
             vec3 fragToLight = spotLight.Position - v_WorldPos.xyz;
             vec3 L = normalize(fragToLight);
             float distance = length(fragToLight);
-            float attenuation = 1.0f / (spotLight.Constant + spotLight.Linear * distance + 
-                                      spotLight.Quadratic * (distance * distance));
+            float attenuation = 1.0f / (Constant + Linear * distance + 
+                                      Quadratic * (distance * distance));
         
             // Spotlight intensity (smoothstep between inner and outer cone)
             float theta = dot(L, -spotLight.Direction); // Normalize spotlight direction before passing
-            float epsilon = spotLight.Cutoff - spotLight.OuterCutoff;
-            float intensity = clamp((theta - spotLight.OuterCutoff) / epsilon, 0.0, 1.0);
-            vec3 radiance = spotLight.Color * attenuation * intensity;
+            float epsilon = Cutoff - OuterCutoff;
+            float intensity = clamp((theta - OuterCutoff) / epsilon, 0.0, 1.0);
+            vec3 radiance = spotLight.Color.xyz * attenuation * intensity;
         
             Lo += calculateLightContribution(N, V, L, F0, radiance, albedo, roughness, metallic) * spotlightShadow;
         }
