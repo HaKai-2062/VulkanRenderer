@@ -27,14 +27,14 @@ project ("VulkanRenderer")
 
 include(FetchContent)
 
-function(CloneRepository repositoryURL branchName projectName sourceDir customCMakePath)
+function(CloneRepository repositoryURL tagName projectName sourceDir customCMakePath)
 	message("Starting to clone ${projectName} into ${sourceDir}")
 		
 	FetchContent_Declare(
 		"${projectName}"
 		GIT_REPOSITORY "${repositoryURL}"
 		SOURCE_DIR "${sourceDir}"
-		GIT_TAG "origin/${branchName}"
+		GIT_TAG "${tagName}"
 		SOURCE_SUBDIR  "${customCMakePath}"
 		CONFIGURE_COMMAND ""
 		BUILD_COMMAND ""
@@ -45,15 +45,15 @@ function(CloneRepository repositoryURL branchName projectName sourceDir customCM
 
 endfunction(CloneRepository)
 
-CloneRepository("https://github.com/glfw/glfw.git" "master" "GLFW" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/GLFW" "")
-CloneRepository("https://github.com/ocornut/imgui.git" "docking" "imgui-docking" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking" "../SkipDelete/imgui-docking")
-CloneRepository("https://github.com/g-truc/glm.git" "master" "GLM" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm" "")
-CloneRepository("https://github.com/nothings/stb.git" "master" "STB" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb" "")
-CloneRepository("https://github.com/tinyobjloader/tinyobjloader.git" "release" "tinyobjloader" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader" "")
-CloneRepository("https://github.com/charles-lunarg/vk-bootstrap.git" "main" "vk-bootstrap" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/vk-bootstrap" "")
-CloneRepository("https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git" "master" "VulkanMemoryAllocator" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/VMA" "")
-CloneRepository("https://github.com/fmtlib/fmt.git" "master" "fmt" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/fmt" "")
-CloneRepository("https://github.com/spnda/fastgltf.git" "main" "fastgltf" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/fastgltf" "")
+CloneRepository("https://github.com/glfw/glfw.git" "origin/master" "GLFW" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/GLFW" "")
+CloneRepository("https://github.com/ocornut/imgui.git" "origin/docking" "imgui-docking" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking" "../SkipDelete/imgui-docking")
+CloneRepository("https://github.com/g-truc/glm.git" "origin/master" "GLM" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm" "")
+CloneRepository("https://github.com/nothings/stb.git" "origin/master" "STB" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb" "")
+CloneRepository("https://github.com/tinyobjloader/tinyobjloader.git" "origin/release" "tinyobjloader" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader" "")
+CloneRepository("https://github.com/charles-lunarg/vk-bootstrap.git" "v1.4.320" "vk-bootstrap" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/vk-bootstrap" "")
+CloneRepository("https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git" "origin/master" "VulkanMemoryAllocator" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/VMA" "")
+CloneRepository("https://github.com/fmtlib/fmt.git" "origin/master" "fmt" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/fmt" "")
+CloneRepository("https://github.com/spnda/fastgltf.git" "origin/main" "fastgltf" "${CMAKE_CURRENT_SOURCE_DIR}/vendor/fastgltf" "")
 
 option(GLFW_BUILD_EXAMPLES "Build the GLFW example programs" OFF)
 option(GLFW_BUILD_TESTS "Build the GLFW test programs" OFF)
@@ -83,16 +83,16 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES CONFIGURE_DEPENDS
 file(GLOB_RECURSE GLSL_EXTRA_FILES CONFIGURE_DEPENDS 
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.glsl"
 )
-source_group("Shader Files" FILES ${GLSL_SOURCE_FILES} ${GLSL_EXTRA_FILES})
-
 file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
-source_group("Source Files" FILES ${MY_SOURCES})
 file(GLOB_RECURSE MY_HEADERS CONFIGURE_DEPENDS 
 	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
 )
-source_group("Header Files" FILES ${MY_HEADERS})
+source_group("Shader Files" FILES ${GLSL_SOURCE_FILES} ${GLSL_EXTRA_FILES})
+#source_group("Source Files" FILES ${MY_SOURCES})
+#source_group("Header Files" FILES ${MY_HEADERS})
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/src FILES ${MY_SOURCES} ${MY_HEADERS})
 
 add_executable("${CMAKE_PROJECT_NAME}" ${MY_SOURCES} ${MY_HEADERS} ${GLSL_SOURCE_FILES} ${GLSL_EXTRA_FILES})
 set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY CXX_STANDARD 20)
@@ -118,17 +118,17 @@ ASSET_PATH="${CMAKE_SOURCE_DIR}/assets/"
 )
 
 target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC 
-"${CMAKE_CURRENT_SOURCE_DIR}/include"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/GLFW/include"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking"
+"${CMAKE_CURRENT_SOURCE_DIR}/src/Engine/"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/GLFW/include/"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/"
 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui-docking/backends/"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm/glm"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm/glm/"
 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb/"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/vk-bootstrap"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/VMA"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/SkipDelete/ktx/include"
-"${CMAKE_CURRENT_SOURCE_DIR}/vendor/SkipDelete/ktx/other_include"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinyobjloader/"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/vk-bootstrap/"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/VMA/"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/SkipDelete/ktx/include/"
+"${CMAKE_CURRENT_SOURCE_DIR}/vendor/SkipDelete/ktx/other_include/"
 "${Vulkan_INCLUDE_DIRS}")
 
 target_link_libraries("${CMAKE_PROJECT_NAME}" PRIVATE 

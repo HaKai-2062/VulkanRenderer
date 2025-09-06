@@ -1,66 +1,35 @@
-#include "camera.h"
+#include "Core/Camera.h"
+#include "Core/Input.h"
+#include "Core/Keycodes.h"
 
 Camera::Camera(glm::vec3 position)
 {
 	m_Position = position;
 }
 
-void Camera::ProcessKeyEvents(GLFWwindow* window, float deltaTime)
+void Camera::ProcessKeyEvents(float deltaTime)
 {
-	for (int key = 0; key < GLFW_KEY_LAST; key++)
-	{
-		m_CurrentKeyState[key] = glfwGetKey(window, key) == GLFW_PRESS;
-	}
-
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, true);
-
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+	if (Input::IsKeyPressed(ENGINE_KEY_W))
 		SetCameraPosition(CameraMotion::FORWARD, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+	if (Input::IsKeyPressed(ENGINE_KEY_S))
 		SetCameraPosition(CameraMotion::BACKWARD, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+	if (Input::IsKeyPressed(ENGINE_KEY_A))
 		SetCameraPosition(CameraMotion::LEFT, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+	if (Input::IsKeyPressed(ENGINE_KEY_D))
 		SetCameraPosition(CameraMotion::RIGHT, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+	if (Input::IsKeyPressed(ENGINE_KEY_Q))
 		SetCameraPosition(CameraMotion::DOWN, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+	if (Input::IsKeyPressed(ENGINE_KEY_E))
 		SetCameraPosition(CameraMotion::UP, deltaTime);
-
-	// Trigger only on key release
-	if (m_PreviousKeyState[GLFW_KEY_M] && !m_CurrentKeyState[GLFW_KEY_M])
-	{
-		if (m_MouseLocked)
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-		else
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-		m_MouseLocked = !m_MouseLocked;
-	}
-
-	m_PreviousKeyState = m_CurrentKeyState;
 }
 
-void Camera::ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn)
+void Camera::ProcessMouseEvents(float deltaTime)
 {
-	glm::vec2 mousePos = { static_cast<float>(xPosIn),  static_cast<float>(yPosIn) };
-	
-	if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL)
-	{
-		m_LastMousePos = mousePos;
+	if (Input::GetCursorState() == CursorState::Show)
 		return;
-	}
 
-	if (m_FirstMouse)
-	{
-		m_LastMousePos = mousePos;
-		m_FirstMouse = false;
-	}
-
-	glm::vec2 mouseOffset = { mousePos.x - m_LastMousePos.x, m_LastMousePos.y - mousePos.y };
-	m_LastMousePos = mousePos;
-
+	std::pair<double, double> deltaMouse = Input::GetDeltaMousePositions();
+	glm::vec2 mouseOffset = { deltaMouse.first, deltaMouse.second };
 	SetCameraDirection(mouseOffset);
 }
 

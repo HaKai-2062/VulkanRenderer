@@ -1,11 +1,17 @@
 #pragma once
 
-#include <array>
-
-#include "vk_types.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <GLFW/glfw3.h>
+
+enum class CameraMotion : uint8_t
+{
+	LEFT = 0,
+	RIGHT,
+	FORWARD,
+	BACKWARD,
+	UP,
+	DOWN
+};
 
 class Camera
 {
@@ -13,8 +19,8 @@ public:
 	Camera(glm::vec3 position = glm::vec3(10.0f, 5.0f, 25.f));
 	const glm::vec3 GetCameraPosition() { return m_Position; }
 	const glm::vec3 GetCameraOrientation() { return m_Front; }
-	void ProcessKeyEvents(GLFWwindow* window, float deltaTime);
-	void ProcessMouseEvents(GLFWwindow* window, double xPosIn, double yPosIn);
+	void ProcessKeyEvents(float deltaTime);
+	void ProcessMouseEvents(float deltaTime);
 	void SetCameraPosition(CameraMotion direction, float deltaTime);
 	void SetCameraDirection(glm::vec2 mouseoffset, bool constrainedPitch = true);
 	glm::mat4 GetViewMatrix();
@@ -33,10 +39,4 @@ private:
 	float m_Speed = 5.0f;
 	float m_Sensitivity = 0.05f;
 	float m_Zoom = 45.0f;
-
-	bool m_MouseLocked = false;
-	std::array<bool, GLFW_KEY_LAST> m_PreviousKeyState{};
-	std::array<bool, GLFW_KEY_LAST> m_CurrentKeyState{};
-	glm::vec2 m_LastMousePos{ 0.0f, 0.0f };
-	bool m_FirstMouse = true;
 };

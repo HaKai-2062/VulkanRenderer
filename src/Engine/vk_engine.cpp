@@ -3,8 +3,6 @@
 #include <thread>
 #include <chrono>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
 #include <glm/gtx/transform.hpp>
 #include <gtc/type_ptr.hpp>
 #define VMA_IMPLEMENTATION
@@ -19,6 +17,7 @@
 #include "vk_images.h"
 #include "vk_engine.h"
 #include "vk_pipelines.h"
+#include "Core/Input.h"
 
 #ifdef NDEBUG
 static const bool bUseValidationLayers = false;
@@ -26,7 +25,6 @@ static const bool bUseValidationLayers = false;
 static const bool bUseValidationLayers = true;
 #endif
 
-static VkExtent2D ScreenSize{ 1920, 1080 };
 static VkExtent3D ShadowResolution{ 2048, 2048, 1 };
 
 bool isVisible(const RenderObject& obj, const glm::mat4& viewproj);
@@ -35,13 +33,7 @@ void ImGuiDarkTheme();
 void VulkanEngine::Init()
 {
 	fmt::print(fmt::fg(fmt::color::green), "Application Created\n");
-
-	glfwInit();
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-	m_WindowExtent = ScreenSize;
-	m_Window = glfwCreateWindow(m_WindowExtent.width, m_WindowExtent.height, "Vulkan Engine", nullptr, nullptr);
-
+	BackEndWindow::Get();
 	InitVulkan();
 	InitSwapchain();
 	InitCommands();
@@ -92,9 +84,8 @@ void VulkanEngine::Cleanup()
 		vkDestroyDevice(Device, nullptr);
 		vkb::destroy_debug_utils_messenger(m_Instance, m_DebugMessenger);
 
-		glfwDestroyWindow(m_Window);
+		BackEndWindow::GetWindow();
 		vkDestroyInstance(m_Instance, nullptr);
-		glfwTerminate();
 
 		fmt::print(fmt::fg(fmt::color::yellow) | fmt::bg(fmt::color::black), "Application Destroyed\n");
 	}
@@ -102,23 +93,22 @@ void VulkanEngine::Cleanup()
 
 void VulkanEngine::MainLoop()
 {
-	while (!glfwWindowShouldClose(m_Window))
+	while (!BackEndWindow::ShouldWindowClose())
 	{
 		auto start = std::chrono::system_clock::now();
 
-		glfwPollEvents();
+		BackEndWindow::BeginFrame();
+		Input::BeginFrame();
 
-		if (glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED))
+		if (BackEndWindow::IsWindowMinimized())
 		{
-			// Window is minimized, skip rendering
+			// Skip rendering
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;
 		}
 
-		double xPos, yPos;
-		glfwGetCursorPos(m_Window, &xPos, &yPos);
-		m_Camera.ProcessKeyEvents(m_Window, m_DeltaTime);
-		m_Camera.ProcessMouseEvents(m_Window, xPos, yPos);
+		m_Camera.ProcessKeyEvents(m_DeltaTime);
+		m_Camera.ProcessMouseEvents(m_DeltaTime);
 
 		if (m_ResizeRequested)
 		{
@@ -176,6 +166,8 @@ void VulkanEngine::MainLoop()
 
 		UpdateDeltaTimeAndTitle();
 		DrawFrame();
+
+		Input::EndFrame();
 
 		auto end = std::chrono::system_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -352,10 +344,7 @@ void VulkanEngine::InitVulkan()
 	m_Instance = vkbInstance.instance;
 	m_DebugMessenger = vkbInstance.debug_messenger;
 
-	if (glfwCreateWindowSurface(m_Instance, m_Window, nullptr, &m_Surface) != VK_SUCCESS)
-	{
-		throw std::runtime_error("Failed to create window surface!");
-	}
+	BackEndWindow::CreateWindowSurface(m_Instance, &m_Surface);
 
 	VkPhysicalDeviceVulkan13Features features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 	features.dynamicRendering = true;
@@ -413,12 +402,13 @@ void VulkanEngine::InitVulkan()
 
 void VulkanEngine::InitSwapchain()
 {
-	CreateSwapchain(m_WindowExtent.width, m_WindowExtent.height);
+	std::pair<uint32_t, uint32_t> windowSize = BackEndWindow::GetWindowSize();
+	CreateSwapchain(windowSize.first, windowSize.second);
 
 	VkExtent3D drawImageExtent =
 	{
-		m_WindowExtent.width,
-		m_WindowExtent.height,
+		windowSize.first,
+		windowSize.second,
 		1
 	};
 
@@ -549,7 +539,7 @@ void VulkanEngine::InitDescriptors()
 	if (!VkUtils::loadCubeMap(this, ASSET_PATH "/hdr/uffizi_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT))
 	{
 		fmt::print(fmt::fg(fmt::color::red), "Error when trying to load cubemap\n");
-		glfwSetWindowShouldClose(m_Window, GLFW_TRUE);
+		BackEndWindow::CloseWindow();
 	}
 
 	// Allocate a descriptor set for our cubemap draw image and it is only sent once here
@@ -1036,12 +1026,8 @@ void VulkanEngine::ResizeSwapchain()
 	
 	DestroySwapchain();
 
-	int w, h;
-	glfwGetWindowSize(m_Window, &w, &h);
-	m_WindowExtent.width = w;
-	m_WindowExtent.height = h;
-
-	CreateSwapchain(m_WindowExtent.width, m_WindowExtent.height);
+	std::pair<uint32_t, uint32_t> windowSize = BackEndWindow::GetWindowSize();
+	CreateSwapchain(windowSize.first, windowSize.second);
 	m_ResizeRequested = false;
 }
 
@@ -1402,7 +1388,7 @@ void VulkanEngine::UpdateDeltaTimeAndTitle()
 	static float lastTime = 0.0f;
 	static size_t nFrames = 0;
 
-	float currentTime = static_cast<float>(glfwGetTime());
+	float currentTime = static_cast<float>(BackEndWindow::GetTime());
 	m_TitleUpdateTime = currentTime - lastTime;
 	nFrames++;
 
@@ -1413,8 +1399,8 @@ void VulkanEngine::UpdateDeltaTimeAndTitle()
 		float delay = static_cast<size_t>(100'000.0f / nFrames) / 100.0f;
 
 		std::stringstream ss;
-		ss << "Vulkan Engine" << "    [FPS: " << fps << "]     " << "[" << delay << " ms]";
-		glfwSetWindowTitle(m_Window, ss.str().c_str());
+		ss << "Engine" << "    [FPS: " << fps << "]     " << "[" << delay << " ms]";
+		BackEndWindow::SetWindowTitle(ss.str().c_str());
 
 		nFrames = 0;
 		lastTime = currentTime;
@@ -1465,7 +1451,7 @@ void VulkanEngine::InitImGui()
 	ImGuiDarkTheme();
 
 	// this initializes imgui for SDL
-	ImGui_ImplGlfw_InitForVulkan(m_Window, true);
+	ImGui_ImplGlfw_InitForVulkan(BackEndWindow::GetWindow(), true);
 
 	// this initializes imgui for Vulkan
 	ImGui_ImplVulkan_InitInfo init_info = {};
@@ -1662,12 +1648,14 @@ void VulkanEngine::UpdateScene()
 	//m_LoadedNodes["Suzanne"]->Draw(glm::mat4(1.0f), m_MainDrawContext);
 
 	m_SceneData.View = m_Camera.GetViewMatrix();
-	m_SceneData.Proj = glm::perspective(glm::radians(70.f), (float)m_WindowExtent.width / (float)m_WindowExtent.height, 10000.f, 0.1f);
+
+	std::pair<uint32_t, uint32_t> windowSize = BackEndWindow::GetWindowSize();
+	m_SceneData.Proj = glm::perspective(glm::radians(70.f), (float)windowSize.first / (float)windowSize.second, 10000.f, 0.1f);
 	m_SceneData.Proj[1][1] *= -1;
 	m_SceneData.ViewProj = m_SceneData.Proj * m_SceneData.View;
 
 	m_SceneData.CameraPosition = glm::vec4(m_Camera.GetCameraPosition(), 1.0);
-	m_SceneData.Time = glfwGetTime();
+	m_SceneData.Time = BackEndWindow::GetTime();
 
 	auto ParamRectangleTrace = [](glm::vec2 pMin, glm::vec2 pMax, float t, bool clockwise) -> glm::vec2 {
 
@@ -1703,8 +1691,8 @@ void VulkanEngine::UpdateScene()
 		return result;
 	};
 
-	glm::vec2 light1XZ = ParamRectangleTrace({ -9.5f, -3.3f }, { 9.5f, 3.3f }, glfwGetTime() * 0.2f, true);
-	glm::vec2 light2XZ = ParamRectangleTrace({ -9.5f, -3.3f }, { 9.5f, 3.3f }, glfwGetTime() * 0.2f, false);
+	glm::vec2 light1XZ = ParamRectangleTrace({ -9.5f, -3.3f }, { 9.5f, 3.3f }, BackEndWindow::GetTime() * 0.2f, true);
+	glm::vec2 light2XZ = ParamRectangleTrace({ -9.5f, -3.3f }, { 9.5f, 3.3f }, BackEndWindow::GetTime() * 0.2f, false);
 
 	float lightSpeed = 1.0f;
 
@@ -1724,9 +1712,9 @@ void VulkanEngine::UpdateScene()
 	for (size_t i = 0; i < pointLightLocations.size(); i++)
 	{
 		Light& light = m_Lights.Lights[i];
-		//light.Position = lightLocations[i] + glm::vec3(8.0f * sin(glfwGetTime() * lightSpeed), 0.0f, 9.0f * cos(glfwGetTime() * lightSpeed));
+		//light.Position = lightLocations[i] + glm::vec3(8.0f * sin(BackEndWindow::GetTime() * lightSpeed), 0.0f, 9.0f * cos(BackEndWindow::GetTime() * lightSpeed));
 		light.Position = pointLightLocations[i];
-		light.Color = glm::vec4(sin(glfwGetTime() * 0.6) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 2.094) * 0.5 + 0.5, sin(glfwGetTime() * 0.6 + 4.188) * 0.5 + 0.5, 1.0f);
+		light.Color = glm::vec4(sin(BackEndWindow::GetTime() * 0.6) * 0.5 + 0.5, sin(BackEndWindow::GetTime() * 0.6 + 2.094) * 0.5 + 0.5, sin(BackEndWindow::GetTime() * 0.6 + 4.188) * 0.5 + 0.5, 1.0f);
 		light.Type = 0;
 	}
 

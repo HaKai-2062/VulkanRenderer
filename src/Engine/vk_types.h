@@ -271,13 +271,3 @@ struct Node : public IRenderable
 	glm::mat4 LocalTransform;
 	glm::mat4 WorldTransform;
 };
-
-enum class CameraMotion : uint8_t
-{
-	LEFT = 0,
-	RIGHT,
-	FORWARD,
-	BACKWARD,
-	UP,
-	DOWN
-};

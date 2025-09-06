@@ -22,7 +22,7 @@ struct Light
 	mat4 LightProj;
 };
 
-layout(std430, set = 0, binding = 1) readonly buffer LightData{   
+layout(std430, set = 0, binding = 1) readonly restrict buffer LightData{   
 	int Count;
 	int TotalPointLights;
 	int TotalSpotLights;

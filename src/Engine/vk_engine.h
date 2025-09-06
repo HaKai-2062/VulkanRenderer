@@ -4,7 +4,8 @@
 
 #include "vk_types.h"
 #include "vk_loader.h"
-#include "camera.h"
+#include "Core/Camera.h"
+#include "Core/BackEndWindow.h"
 
 struct ComputePushConstants
 {
@@ -80,8 +81,6 @@ private:
 	float m_LastFrameTime{ 0 };
 	float m_DeltaTime{ 0 };
 	float m_TitleUpdateTime{ 0 };
-	VkExtent2D m_WindowExtent{ 100 , 100 };
-	struct GLFWwindow* m_Window{ nullptr };
 	std::vector<ComputeEffect> m_BGEffects;
 	int m_CurrentBGEffect{ 1 };
 	glm::vec3 m_DirectionalLightDir{ -0.63f, -0.778f, 0.02f };
