@@ -3,33 +3,30 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
 #include <vk_mem_alloc.h>
-#include <fmt/core.h>
-#include <fmt/os.h>
-#include <fmt/color.h>
 
 #include <vector>
 #include <memory>
-#include <deque>
+#include <format>
 #include <functional>
-#include <span>
 
 #include <glm/glm.hpp>
+
+#include "vk_descriptors.h"
+#include "Core/Log.h"
 
 constexpr unsigned int MAX_FRAMES_IN_FLIGHT = 2;
 constexpr unsigned int MAX_POINT_LIGHTS = 8;
 constexpr unsigned int MAX_SPOT_LIGHTS = 8;
 
-#define VK_CHECK(x)                                                 \
-	do                                                              \
-	{                                                               \
-		VkResult err = x;                                           \
-		if (err)                                                    \
-		{                                                           \
-			fmt::print("{} {}\n",\
-				fmt::styled("Vulkan error:", fmt::fg(fmt::color::red) | fmt::emphasis::bold),\
-				fmt::styled(string_VkResult(err), fmt::fg(fmt::color::yellow)));\
-			abort();                                                \
-		}                                                           \
+#define VK_CHECK(x)																				   \
+	do																							   \
+	{																							   \
+		VkResult err = x;																		   \
+		if (err)																				   \
+		{																						   \
+			Log::Write(LogLevel::FATAL, std::format("VK_CHECK {}", string_VkResult(err)).c_str()); \
+			abort();																			   \
+		}																						   \
 	} while (0)
 
 struct DeletionQueue
@@ -51,52 +48,6 @@ struct DeletionQueue
 
 		Deletors.clear();
 	}
-};
-
-struct DescriptorLayoutBuilder
-{
-	std::vector<VkDescriptorSetLayoutBinding> Bindings;
-
-	void AddBinding(uint32_t binding, VkDescriptorType type, uint32_t count = 1);
-	void Clear();
-	VkDescriptorSetLayout Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
-};
-
-class DescriptorAllocatorDynamic
-{
-public:
-	struct PoolSizeRatio
-	{
-		VkDescriptorType Type;
-		float Ratio;
-	};
-
-	void Init(VkDevice device, uint32_t initialSets, std::span<PoolSizeRatio> poolRatios);
-	void ClearPools(VkDevice device);
-	void DestroyPools(VkDevice device);
-	VkDescriptorSet Allocate(VkDevice device, VkDescriptorSetLayout layout, void* pNext = nullptr);
-
-private:
-	VkDescriptorPool GetPool(VkDevice device);
-	VkDescriptorPool CreatePool(VkDevice device, uint32_t setCount, std::span<PoolSizeRatio> poolRatios);
-
-	std::vector<PoolSizeRatio> m_Ratios;
-	std::vector<VkDescriptorPool> m_FullPools;
-	std::vector<VkDescriptorPool> m_ReadyPools;
-	uint32_t m_SetsPerPool;
-};
-
-struct DescriptorWriter
-{
-	std::deque<VkDescriptorImageInfo> ImageInfos;
-	std::deque<VkDescriptorBufferInfo> BufferInfos;
-	std::vector<VkWriteDescriptorSet> Writes;
-
-	void WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
-	void WriteImage(int binding, const std::vector<VkImageView>& images, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
-	void WriteBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
-	void Clear();
-	void UpdateSet(VkDevice device, VkDescriptorSet set);
 };
 
 struct FrameData

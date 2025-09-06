@@ -4,7 +4,7 @@
 
 #include "vk_types.h"
 #include "vk_loader.h"
-#include "Core/Camera.h"
+#include "Scene/Camera.h"
 #include "Core/BackEndWindow.h"
 
 struct ComputePushConstants
@@ -118,7 +118,8 @@ private:
 	VkPhysicalDevice m_PhysicalDevice;
 	VkSurfaceKHR m_Surface;
 	VkSwapchainKHR m_Swapchain;
-	VkFormat m_SwapchainFormat;
+	// TDL: this is bad
+	static VkFormat m_SwapchainFormat;
 	std::vector<VkImage> m_SwapchainImages;
 	std::vector<VkImageView> m_SwapchainImageViews;
 	VkExtent2D m_SwapchainExtent;
@@ -151,6 +152,8 @@ public:
 	AllocatedImage CreateCubeMapImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mipMapLevels);
 	AllocatedImage UploadCubeMapImage(void* data, const std::span<VkBufferImageCopy> bufferCopyRegions, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mapMapLevels, size_t dataSize);
 	void DestroyImage(const AllocatedImage& image);
+
+	static const VkFormat& GetSwapchainFormat() { return m_SwapchainFormat; }
 
 private:
 	void InitVulkan();

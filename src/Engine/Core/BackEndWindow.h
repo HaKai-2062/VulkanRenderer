@@ -1,4 +1,6 @@
 #pragma once
+
+#include <utility>
 #include <stdint.h>
 
 struct GLFWwindow;
@@ -43,7 +45,7 @@ public:
     static bool IsKeyPressed(uint32_t key);
     static bool IsWindowMinimized();
 
-    // Use a timer class later on
+    // TDL: Use a timer class later on
     static double GetTime();
 
 private:

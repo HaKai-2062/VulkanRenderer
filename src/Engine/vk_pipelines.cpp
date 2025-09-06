@@ -2,6 +2,7 @@
 
 #include "vk_pipelines.h"
 #include "vk_initializers.h"
+#include "Core/Log.h"
 
 void PipelineBuilder::Clear()
 {
@@ -60,7 +61,7 @@ VkPipeline PipelineBuilder::BuildPipeline(VkDevice device)
     VkPipeline newPipeline;
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS)
     {
-        fmt::print(fmt::fg(fmt::color::red), "Error: Failed to create the new graphics pipeline\n");
+        Log::Write(LogLevel::FATAL, "Failed to create the new graphics pipeline");
         return VK_NULL_HANDLE;
     }
 

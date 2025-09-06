@@ -1,6 +1,3 @@
-#include <fmt/core.h>
-#include <fmt/os.h>
-#include <fmt/color.h>
 #include <variant>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -157,10 +154,6 @@ std::optional<AllocatedImage> loadImage(VulkanEngine* engine, fastgltf::Asset& a
 
 std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, std::string_view filePath)
 {
-	fmt::print(fmt::fg(fmt::color::white), "Loading GLTF: ");
-	fmt::print(fmt::fg(fmt::color::yellow), "{}", filePath);
-	fmt::print(fmt::fg(fmt::color::white), " | ");
-
 	std::shared_ptr<LoadedGLTF> scene = std::make_shared<LoadedGLTF>();
 	scene->Engine = engine;
 	LoadedGLTF& file = *scene.get();
@@ -174,16 +167,12 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, s
 	std::filesystem::path path = filePath;
 
 	auto load = parser.loadGltf(data.get(), path.parent_path(), gltfOptions);
-	if (load)
-	{
-		gltf = std::move(load.get());
-		fmt::print(fmt::fg(fmt::color::green), "SUCCESS\n");
-	}
-	else
-	{
-		fmt::print(fmt::fg(fmt::color::red), "FAILED\n");
+	Log::Write(LogLevel::DEBUG, std::format("Loading GLTF: {} | {}", filePath, load ? "SUCCESS" : "FAIL").c_str());
+
+	if (!load)
 		return {};
-	}
+
+	gltf = std::move(load.get());
 
 	// We can stimate the descriptors we will need accurately
 	std::vector<DescriptorAllocatorDynamic::PoolSizeRatio> sizes = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3 },
@@ -231,7 +220,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VulkanEngine* engine, s
 			// we failed to load, so lets give the slot a default white texture to not
 			// completely break loading
 			images.push_back(engine->ErrorCheckerboardImage);
-			fmt::print(fmt::fg(fmt::color::red), "GLTF failed to load texture {}\n", image.name);
+			Log::Write(LogLevel::ERROR, std::format("GLTF failed to load texture {}", image.name).c_str());
 		}
 	}
 

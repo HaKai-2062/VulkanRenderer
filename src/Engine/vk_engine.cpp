@@ -2,15 +2,13 @@
 #include <array>
 #include <thread>
 #include <chrono>
+#include <format>
 
 #include <glm/gtx/transform.hpp>
 #include <gtc/type_ptr.hpp>
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 #include <VkBootstrap.h>
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_vulkan.h>
 
 #include "vk_types.h"
 #include "vk_initializers.h"
@@ -18,6 +16,8 @@
 #include "vk_engine.h"
 #include "vk_pipelines.h"
 #include "Core/Input.h"
+#include "Core/Log.h"
+#include "ImGui/BackEndImGui.h"
 
 #ifdef NDEBUG
 static const bool bUseValidationLayers = false;
@@ -26,13 +26,12 @@ static const bool bUseValidationLayers = true;
 #endif
 
 static VkExtent3D ShadowResolution{ 2048, 2048, 1 };
-
+VkFormat VulkanEngine::m_SwapchainFormat = {};
 bool isVisible(const RenderObject& obj, const glm::mat4& viewproj);
-void ImGuiDarkTheme();
 
 void VulkanEngine::Init()
 {
-	fmt::print(fmt::fg(fmt::color::green), "Application Created\n");
+	Log::Write(LogLevel::INFO, "Application Created");
 	BackEndWindow::Get();
 	InitVulkan();
 	InitSwapchain();
@@ -47,6 +46,7 @@ void VulkanEngine::Init()
 
 	m_IsInitialized = true;
 }
+
 void VulkanEngine::Cleanup()
 {
 	if (m_IsInitialized)
@@ -87,7 +87,7 @@ void VulkanEngine::Cleanup()
 		BackEndWindow::GetWindow();
 		vkDestroyInstance(m_Instance, nullptr);
 
-		fmt::print(fmt::fg(fmt::color::yellow) | fmt::bg(fmt::color::black), "Application Destroyed\n");
+		Log::Write(LogLevel::INFO, "Application Destroyed");
 	}
 }
 
@@ -115,54 +115,7 @@ void VulkanEngine::MainLoop()
 			ResizeSwapchain();
 		}
 
-		// imgui new frame
-		ImGui_ImplVulkan_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-
-		//some imgui UI to test
-		//ImGui::ShowDemoWindow();
-
-		if (ImGui::Begin("Main Menu"))
-		{
-			ImGui::SliderFloat("Render Scale", &m_RenderScale, 0.3f, 1.f);
-
-			glm::vec3 pos = m_Camera.GetCameraPosition();
-			glm::vec3 rot = m_Camera.GetCameraOrientation();
-
-			ImGui::Text("Frametime:   %f ms", Stats.FrameTime);
-			ImGui::Text("Draw Time:   %f ms", Stats.MeshDrawTime);
-			ImGui::Text("Update Time: %f ms", Stats.SceneUpdateTime);
-			ImGui::Text("Triangles:   %i", Stats.TriangleCount);
-			ImGui::Text("Draws:		  %i", Stats.DrawcallCount);
-
-			ImGui::NewLine();
-
-			ImGui::Text("Location:	  %f, %f, %f", pos.x, pos.y, pos.z);
-			ImGui::Text("Rotation:	  %f, %f, %f", rot.x, rot.y, rot.z);
-
-			ImGui::NewLine();
-			if (ImGui::CollapsingHeader("Lights"))
-			{
-				ImGui::ColorEdit3("Ambient Light", glm::value_ptr(m_SceneData.AmbientColor));
-
-				for (size_t i = 0; i < m_Lights.Lights.size(); i++)
-				{
-					ImGui::PushID(i);
-					ImGui::SliderInt("Type", &m_Lights.Lights[i].Type, 0, 2);
-					ImGui::SliderFloat("Intensity", &m_Lights.Lights[i].Intensity, 0.0f, 999.0f);
-					ImGui::ColorEdit3("Position", glm::value_ptr(m_Lights.Lights[i].Position));
-					ImGui::ColorEdit4("Color", glm::value_ptr(m_Lights.Lights[i].Color));
-					ImGui::SliderFloat3("Direction", glm::value_ptr(m_Lights.Lights[i].Direction), -1.0f, 1.0f);
-					ImGui::PopID();
-				}
-			}
-		}
-
-		ImGui::End();
-
-		//make imgui calculate internal draw structures
-		ImGui::Render();
+		BackEndImGui::BeginFrame();
 
 		UpdateDeltaTimeAndTitle();
 		DrawFrame();
@@ -230,12 +183,7 @@ void VulkanEngine::DrawFrame()
 	// _renderFence will now block until the graphic commands finish execution
 	VK_CHECK(vkQueueSubmit2(m_GraphicsQueue, 1, &submit, GetCurrentFrame().RenderFence));
 
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-	{
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
-	}
+	//BackEndImGui::Render();
 
 	//prepare present
 	// this will put the image we just rendered to into the visible window.
@@ -379,9 +327,7 @@ void VulkanEngine::InitVulkan()
 	
 	if (bUseValidationLayers)
 	{
-		fmt::print("{} {}\n", \
-			fmt::styled("GPU: ", fmt::fg(fmt::color::white) | fmt::emphasis::bold), \
-			fmt::styled(deviceProperties.deviceName, fmt::fg(fmt::color::green_yellow)));\
+		Log::Write(LogLevel::DEBUG, std::format("GPU: {}", deviceProperties.deviceName).c_str());
 	}
 
 	m_GraphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
@@ -538,7 +484,7 @@ void VulkanEngine::InitDescriptors()
 	// Upload cubemap stuff
 	if (!VkUtils::loadCubeMap(this, ASSET_PATH "/hdr/uffizi_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when trying to load cubemap\n");
+		Log::Write(LogLevel::ERROR, "Failed to load cubemap");
 		BackEndWindow::CloseWindow();
 	}
 
@@ -595,11 +541,11 @@ void VulkanEngine::InitCubeMapPipeline()
 
 	if (!VkUtils::loadShaderModule(SHADER_PATH "cubemap.frag.spv", Device, &fragShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building cubemap frag shader\n");
+		Log::Write(LogLevel::FATAL, "Building cubemap frag shader");
 	}
 	if (!VkUtils::loadShaderModule(SHADER_PATH "cubemap.vert.spv", Device, &vertexShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building cubemap vert shader\n");
+		Log::Write(LogLevel::FATAL, "Building cubemap vert shader");
 	}
 
 	VkPushConstantRange bufferRange{};
@@ -647,11 +593,11 @@ void VulkanEngine::InitMeshPipeline()
 
 	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.frag.spv", Device, &fragShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building mesh frag shader\n");
+		Log::Write(LogLevel::FATAL, "Building mesh frag shader");
 	}
 	if (!VkUtils::loadShaderModule(SHADER_PATH "mesh.vert.spv", Device, &vertexShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building mesh vert shader\n");
+		Log::Write(LogLevel::FATAL, "Building mesh vert shader");
 	}
 
 	VkPushConstantRange bufferRange{};
@@ -699,11 +645,11 @@ void VulkanEngine::InitShadowMapPipeline()
 
 	if (!VkUtils::loadShaderModule(SHADER_PATH "shadowmap.frag.spv", Device, &fragShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building shadowmap frag shader\n");
+		Log::Write(LogLevel::FATAL, "Building shadowmap frag shader");
 	}
 	if (!VkUtils::loadShaderModule(SHADER_PATH "shadowmap.vert.spv", Device, &vertexShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building shadowmap vert shader\n");
+		Log::Write(LogLevel::FATAL, "Building shadowmap vert shader");
 	}
 
 	VkPushConstantRange bufferRange{};
@@ -886,11 +832,11 @@ void GLTFMetallic_Roughness::BuildPipelines(VulkanEngine* engine)
 
 	if (!VkUtils::loadShaderModule(SHADER_PATH "scene.frag.spv", engine->Device, &fragShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building the scene fragment shader\n");
+		Log::Write(LogLevel::FATAL, "Building scene frag shader");
 	}
 	if (!VkUtils::loadShaderModule(SHADER_PATH "scene.vert.spv", engine->Device, &vertexShader))
 	{
-		fmt::print(fmt::fg(fmt::color::red), "Error when building the scene vertex shader\n");
+		Log::Write(LogLevel::FATAL, "Building scene vert shader");
 	}
 
 	VkPushConstantRange matrixRange{};
@@ -1310,9 +1256,7 @@ void VulkanEngine::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
 	VkRenderingInfo renderInfo = VkInit::renderingInfo(m_SwapchainExtent, &colorAttachment, nullptr);
 
 	vkCmdBeginRendering(cmd, &renderInfo);
-
-	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
-
+	BackEndImGui::EndFrame(cmd);
 	vkCmdEndRendering(cmd);
 }
 
@@ -1438,46 +1382,11 @@ void VulkanEngine::InitImGui()
 	VkDescriptorPool imguiPool;
 	VK_CHECK(vkCreateDescriptorPool(Device, &poolInfo, nullptr, &imguiPool));
 
-	// 2: initialize imgui library
-
-	// this initializes the core structures of imgui
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
-	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
-
-	ImGuiDarkTheme();
-
-	// this initializes imgui for SDL
-	ImGui_ImplGlfw_InitForVulkan(BackEndWindow::GetWindow(), true);
-
-	// this initializes imgui for Vulkan
-	ImGui_ImplVulkan_InitInfo init_info = {};
-	init_info.Instance = m_Instance;
-	init_info.PhysicalDevice = m_PhysicalDevice;
-	init_info.Device = Device;
-	init_info.Queue = m_GraphicsQueue;
-	init_info.DescriptorPool = imguiPool;
-	init_info.MinImageCount = 3;
-	init_info.ImageCount = 3;
-	init_info.UseDynamicRendering = true;
-
-	//dynamic rendering parameters for imgui to use
-	init_info.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-	init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-	init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &m_SwapchainFormat;
-
-	init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-
-	ImGui_ImplVulkan_Init(&init_info);
-
-	//ImGui_ImplVulkan_CreateFontsTexture();
+	BackEndImGui::Init(m_Instance, m_PhysicalDevice, Device, m_GraphicsQueue, imguiPool);
 
 	// add the destroy the imgui created structures
 	m_MainDeletionQueue.PushFunction([=]() {
-		ImGui_ImplVulkan_Shutdown();
+		BackEndImGui::Shutdown();
 		vkDestroyDescriptorPool(Device, imguiPool, nullptr);
 		});
 }
@@ -1771,7 +1680,6 @@ void VulkanEngine::UpdateScene()
 		return;
 
 	m_LoadedScenes["structure"]->Draw(glm::mat4{ 1.0f }, m_MainDrawContext);
-	//fmt::print(fmt::fg(fmt::color::yellow) | fmt::bg(fmt::color::black), "{}\n", sizeof(LightData));
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -1850,90 +1758,4 @@ bool isVisible(const RenderObject& obj, const glm::mat4& viewproj)
 	{
 		return true;
 	}
-}
-
-// Dark Theme for ImGui
-// Source: https://github.com/ocornut/imgui/issues/707#issuecomment-917151020
-void ImGuiDarkTheme()
-{
-	ImVec4* colors = ImGui::GetStyle().Colors;
-	colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-	colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-	colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
-	colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-	colors[ImGuiCol_PopupBg] = ImVec4(0.19f, 0.19f, 0.19f, 0.92f);
-	colors[ImGuiCol_Border] = ImVec4(0.19f, 0.19f, 0.19f, 0.29f);
-	colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.24f);
-	colors[ImGuiCol_FrameBg] = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
-	colors[ImGuiCol_FrameBgHovered] = ImVec4(0.19f, 0.19f, 0.19f, 0.54f);
-	colors[ImGuiCol_FrameBgActive] = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
-	colors[ImGuiCol_TitleBg] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
-	colors[ImGuiCol_TitleBgActive] = ImVec4(0.06f, 0.06f, 0.06f, 1.00f);
-	colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
-	colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
-	colors[ImGuiCol_ScrollbarBg] = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
-	colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.34f, 0.34f, 0.34f, 0.54f);
-	colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.40f, 0.54f);
-	colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.56f, 0.56f, 0.56f, 0.54f);
-	colors[ImGuiCol_CheckMark] = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
-	colors[ImGuiCol_SliderGrab] = ImVec4(0.34f, 0.34f, 0.34f, 0.54f);
-	colors[ImGuiCol_SliderGrabActive] = ImVec4(0.56f, 0.56f, 0.56f, 0.54f);
-	colors[ImGuiCol_Button] = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
-	colors[ImGuiCol_ButtonHovered] = ImVec4(0.19f, 0.19f, 0.19f, 0.54f);
-	colors[ImGuiCol_ButtonActive] = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
-	colors[ImGuiCol_Header] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
-	colors[ImGuiCol_HeaderHovered] = ImVec4(0.00f, 0.00f, 0.00f, 0.36f);
-	colors[ImGuiCol_HeaderActive] = ImVec4(0.20f, 0.22f, 0.23f, 0.33f);
-	colors[ImGuiCol_Separator] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
-	colors[ImGuiCol_SeparatorHovered] = ImVec4(0.44f, 0.44f, 0.44f, 0.29f);
-	colors[ImGuiCol_SeparatorActive] = ImVec4(0.40f, 0.44f, 0.47f, 1.00f);
-	colors[ImGuiCol_ResizeGrip] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
-	colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.44f, 0.44f, 0.44f, 0.29f);
-	colors[ImGuiCol_ResizeGripActive] = ImVec4(0.40f, 0.44f, 0.47f, 1.00f);
-	colors[ImGuiCol_Tab] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
-	colors[ImGuiCol_TabHovered] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
-	colors[ImGuiCol_TabActive] = ImVec4(0.20f, 0.20f, 0.20f, 0.36f);
-	colors[ImGuiCol_TabUnfocused] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
-	colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
-	colors[ImGuiCol_DockingPreview] = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
-	colors[ImGuiCol_DockingEmptyBg] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-	colors[ImGuiCol_PlotLines] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-	colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-	colors[ImGuiCol_PlotHistogram] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-	colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-	colors[ImGuiCol_TableHeaderBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
-	colors[ImGuiCol_TableBorderStrong] = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
-	colors[ImGuiCol_TableBorderLight] = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
-	colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-	colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
-	colors[ImGuiCol_TextSelectedBg] = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
-	colors[ImGuiCol_DragDropTarget] = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
-	colors[ImGuiCol_NavHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-	colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 0.70f);
-	colors[ImGuiCol_NavWindowingDimBg] = ImVec4(1.00f, 0.00f, 0.00f, 0.20f);
-	colors[ImGuiCol_ModalWindowDimBg] = ImVec4(1.00f, 0.00f, 0.00f, 0.35f);
-
-	ImGuiStyle& style = ImGui::GetStyle();
-	style.WindowPadding = ImVec2(8.00f, 8.00f);
-	style.FramePadding = ImVec2(5.00f, 2.00f);
-	style.CellPadding = ImVec2(6.00f, 6.00f);
-	style.ItemSpacing = ImVec2(6.00f, 6.00f);
-	style.ItemInnerSpacing = ImVec2(6.00f, 6.00f);
-	style.TouchExtraPadding = ImVec2(0.00f, 0.00f);
-	style.IndentSpacing = 25;
-	style.ScrollbarSize = 15;
-	style.GrabMinSize = 10;
-	style.WindowBorderSize = 1;
-	style.ChildBorderSize = 1;
-	style.PopupBorderSize = 1;
-	style.FrameBorderSize = 1;
-	style.TabBorderSize = 1;
-	style.WindowRounding = 7;
-	style.ChildRounding = 4;
-	style.FrameRounding = 3;
-	style.PopupRounding = 4;
-	style.ScrollbarRounding = 9;
-	style.GrabRounding = 3;
-	style.LogSliderDeadzone = 4;
-	style.TabRounding = 4;
 }

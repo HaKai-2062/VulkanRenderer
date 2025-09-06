@@ -1,4 +1,4 @@
-#include "Core/Camera.h"
+#include "Scene/Camera.h"
 #include "Core/Input.h"
 #include "Core/Keycodes.h"
 
